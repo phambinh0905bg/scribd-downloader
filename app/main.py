@@ -1,7 +1,9 @@
+import os
 import uuid
 import json
 import asyncio
 import logging
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -15,19 +17,13 @@ from pydantic import BaseModel
 from app.config import settings
 from app.downloader import downloader_service, DownloadTask
 from app.youtube import youtube_service, YouTubeTask
-
 from app.facebook import facebook_service, FacebookTask
 from app.direct_downloader import direct_downloader_service, DirectDownloadTask
 from app.cleanup import start_cleanup_scheduler, cleanup_expired_and_abandoned_files, get_storage_stats, delete_task_files
 
-
-
-
-
 # Route all system and library temporary files to high-capacity storage (disk1)
 settings.DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
-import tempfile
 os.environ["TMPDIR"] = str(settings.TEMP_DIR)
 os.environ["TEMP"] = str(settings.TEMP_DIR)
 os.environ["TMP"] = str(settings.TEMP_DIR)
@@ -52,12 +48,12 @@ async def lifespan(app: FastAPI):
         pass
     logger.info("Application shutdown complete.")
 
-
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan
 )
+
 
 # Mount static and template directories
 static_dir = Path(__file__).parent / "static"
