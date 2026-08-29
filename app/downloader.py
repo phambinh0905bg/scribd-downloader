@@ -299,6 +299,19 @@ class ScribdDownloaderService:
                     page: Page = await context.new_page()
                     page.set_default_timeout(35000)
 
+                    async def wait_for_scribd_challenge(p_page: Page, p_task: DownloadTask):
+                        for i in range(15):
+                            try:
+                                title = await p_page.title()
+                                if any(kw in title.lower() for kw in ["client challenge", "just a moment", "checking your browser", "attention required", "cloudflare"]):
+                                    if i == 0 or i % 4 == 0:
+                                        p_task.add_log("Đang vượt tường lửa xác thực Cloudflare của Scribd...")
+                                    await asyncio.sleep(1.0)
+                                else:
+                                    break
+                            except Exception:
+                                await asyncio.sleep(1.0)
+
                     try:
                         task.update_progress("connecting", "Đang kết nối tới máy chủ Scribd...", 15)
                         task.add_log(f"Đang tải trang embed: {embed_url}")
@@ -311,12 +324,31 @@ class ScribdDownloaderService:
                             target_url = fallback_url
                             response = await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
                         
+                        await wait_for_scribd_challenge(page, task)
+                        
                         task.add_log("Đang chờ trình xem tài liệu tải xong các trang...")
                         try:
-                            await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .document_container, .newpage, .pageCount", timeout=12000)
+                            await page.wait_for_selector(".document_column, .outer_page, div[id^='outer_page_'], .document_container, .newpage, .page, .pageCount, .absimg, div[data-page-number]", timeout=12000)
                         except Exception:
                             pass
                         
+                        # Trigger scrolling to load pages
+                        try:
+                            await page.evaluate("""
+                            async () => {
+                                const scroller = document.querySelector('.document_scroller') || document.querySelector('.document_column') || window;
+                                for (let i = 0; i < 4; i++) {
+                                    if (scroller.scrollBy) scroller.scrollBy(0, 1500);
+                                    else window.scrollBy(0, 1500);
+                                    await new Promise(r => setTimeout(r, 250));
+                                }
+                                if (scroller.scrollTo) scroller.scrollTo(0, 0);
+                                else window.scrollTo(0, 0);
+                            }
+                            """)
+                        except Exception:
+                            pass
+                            
                         await asyncio.sleep(1.0)
                         
                         # Step 3: Extract Metadata & Unblur
@@ -378,7 +410,7 @@ class ScribdDownloaderService:
                         
                         raw_title = meta.get("title") or f"Scribd_Document_{doc_id}"
                         raw_title = re.sub(r'\|\s*Scribd.*$', '', raw_title, flags=re.IGNORECASE).strip()
-                        if not raw_title or raw_title.lower() == "scribd":
+                        if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
                             raw_title = f"Scribd_Document_{doc_id}"
                         
                         task.title = raw_title
@@ -395,6 +427,7 @@ class ScribdDownloaderService:
                         if total_pages_detected == 0 and target_url != fallback_url:
                             task.add_log(f"Chuyển sang trang tài liệu chính: {fallback_url}...", level="warning")
                             await page.goto(fallback_url, wait_until="domcontentloaded", timeout=30000)
+                            await wait_for_scribd_challenge(page, task)
                             try:
                                 await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .document_scroller, .document_container, div[data-page-number], section[data-page-number], div.page_wrapper", timeout=12000)
                             except Exception:
@@ -405,6 +438,7 @@ class ScribdDownloaderService:
                             page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper")
                             if total_pages_detected == 0:
                                 total_pages_detected = len(page_elements)
+
                         
                         if total_pages_detected == 0:
                             task.error_message = "Không tìm thấy trang nào trong tài liệu này (có thể tài liệu đã bị xóa hoặc ở chế độ riêng tư)."
