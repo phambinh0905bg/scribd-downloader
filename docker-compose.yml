@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  scribd-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scribd-downloader-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - CLEANUP_MINUTES=${CLEANUP_MINUTES:-30}
+      - CLEANUP_INTERVAL_SECONDS=${CLEANUP_INTERVAL_SECONDS:-60}
+      - MAX_CONCURRENT_DOWNLOADS=${MAX_CONCURRENT_DOWNLOADS:-3}
+      - DEVICE_SCALE_FACTOR=${DEVICE_SCALE_FACTOR:-2.0}
+    volumes:
+      - ./downloads:/app/downloads
+    shm_size: '2gb' # Tránh crash Chromium do thiếu shared memory khi render tài liệu lớn
+
