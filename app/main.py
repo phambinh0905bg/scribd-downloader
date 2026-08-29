@@ -16,6 +16,7 @@ from app.config import settings
 from app.downloader import downloader_service, DownloadTask
 from app.youtube import youtube_service, YouTubeTask
 from app.facebook import facebook_service, FacebookTask
+from app.direct_downloader import direct_downloader_service, DirectDownloadTask
 from app.cleanup import start_cleanup_scheduler, cleanup_expired_files, get_storage_stats
 
 # Configure Logging
@@ -76,7 +77,16 @@ class FacebookInfoRequest(BaseModel):
 class FacebookDownloadRequest(BaseModel):
     url: str
     format_type: Optional[str] = "video"  # "video" or "audio"
-    quality: Optional[str] = "best"       # "best", "hd", "sd", "320k", "192k", "128k", "m4a"
+    quality: Optional[str] = "best"
+
+
+class DirectInfoRequest(BaseModel):
+    url: str
+
+
+class DirectDownloadRequest(BaseModel):
+    url: str
+    custom_filename: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -87,7 +97,8 @@ async def serve_index(request: Request):
         context={
             "app_name": settings.APP_NAME,
             "app_version": settings.APP_VERSION,
-            "cleanup_minutes": settings.CLEANUP_MINUTES
+            "cleanup_minutes": settings.CLEANUP_MINUTES,
+            "cleanup_hours": round(settings.CLEANUP_MINUTES / 60, 1)
         }
     )
 
@@ -191,6 +202,42 @@ async def start_facebook_download(req: FacebookDownloadRequest):
     }
 
 
+# --- REMOTE DIRECT URL ENDPOINTS ---
+
+@app.post("/api/direct/info")
+async def get_direct_file_info(req: DirectInfoRequest):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL tệp tin.")
+    try:
+        info = await asyncio.to_thread(direct_downloader_service.extract_info, url)
+        return {"status": "success", "data": info}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Không thể lấy thông tin tệp: {str(e)}")
+
+
+@app.post("/api/direct/download")
+async def start_direct_file_download(req: DirectDownloadRequest):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL tệp tin.")
+        
+    task_id = str(uuid.uuid4())[:8]
+    task = DirectDownloadTask(
+        task_id=task_id,
+        url=url,
+        custom_filename=req.custom_filename
+    )
+    
+    await direct_downloader_service.start_download_task(task)
+    
+    return {
+        "status": "success",
+        "task_id": task_id,
+        "message": "Đã khởi tạo tác vụ tải tệp tin từ xa."
+    }
+
+
 # --- UNIVERSAL STATUS & STREAMING ---
 
 @app.get("/api/status/{task_id}")
@@ -210,6 +257,11 @@ async def get_task_status(task_id: str):
     if fb_task:
         return fb_task.to_dict()
         
+    # 4. Check Direct Remote Download tasks
+    dir_task = direct_downloader_service.get_task(task_id)
+    if dir_task:
+        return dir_task.to_dict()
+        
     raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ hoặc tác vụ đã hết hạn.")
 
 
@@ -219,8 +271,9 @@ async def stream_task_progress(task_id: str):
     task = downloader_service.get_task(task_id)
     yt_task = youtube_service.get_task(task_id)
     fb_task = facebook_service.get_task(task_id)
+    dir_task = direct_downloader_service.get_task(task_id)
     
-    if not task and not yt_task and not fb_task:
+    if not task and not yt_task and not fb_task and not dir_task:
         raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ tải.")
 
     async def event_generator():
@@ -239,13 +292,13 @@ async def stream_task_progress(task_id: str):
             finally:
                 task.unsubscribe(queue)
         else:
-            # Polling stream generator for YouTube and Facebook tasks
-            target_task = yt_task or fb_task
+            # Polling stream generator for YouTube, Facebook and Direct tasks
+            target_task = yt_task or fb_task or dir_task
             last_status = None
             last_pct = -1
             last_log_count = 0
             
-            for _ in range(600):  # max 10 minutes
+            for _ in range(1200):  # max 20 minutes
                 if not target_task:
                     break
                 data = target_task.to_dict()
@@ -263,7 +316,7 @@ async def stream_task_progress(task_id: str):
                     await asyncio.sleep(0.5)
                     break
                     
-                await asyncio.sleep(0.8)
+                await asyncio.sleep(0.6)
 
     return StreamingResponse(
         event_generator(),
@@ -307,6 +360,15 @@ async def download_output_file(task_id: str):
             path=str(fb_task.file_path),
             filename=fb_task.clean_filename,
             media_type=content_type
+        )
+        
+    # Check Direct task
+    dir_task = direct_downloader_service.get_task(task_id)
+    if dir_task and dir_task.status == "completed" and dir_task.file_path and dir_task.file_path.exists():
+        return FileResponse(
+            path=str(dir_task.file_path),
+            filename=dir_task.clean_filename,
+            media_type=dir_task.content_type or "application/octet-stream"
         )
         
     # Check disk folder

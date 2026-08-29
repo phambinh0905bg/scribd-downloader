@@ -174,11 +174,14 @@ def create_and_start_container():
         "Env": [
             "PORT=8000",
             "HOST=0.0.0.0",
-            "CLEANUP_MINUTES=30",
-            "MAX_CONCURRENT_DOWNLOADS=3",
+            "CLEANUP_MINUTES=300",
+            "MAX_CONCURRENT_DOWNLOADS=4",
             "DEVICE_SCALE_FACTOR=2.0"
         ],
         "HostConfig": {
+            "Binds": [
+                "/disk1/data/downloads:/app/downloads"
+            ],
             "PortBindings": {
                 "8000/tcp": [
                     {
@@ -191,6 +194,7 @@ def create_and_start_container():
             },
             "ShmSize": 2147483648
         }
+
     }
     
     headers = {

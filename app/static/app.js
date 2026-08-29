@@ -3,16 +3,18 @@ let activeEventSource = null;
 let activePollingInterval = null;
 let countdownTimerInterval = null;
 let currentTaskId = null;
-let currentMode = "scribd"; // "scribd", "youtube", or "facebook"
+let currentMode = "scribd"; // "scribd", "youtube", "facebook", or "direct"
 
 // Navigation Tabs
 const tabScribd = document.getElementById("tab-scribd");
 const tabYouTube = document.getElementById("tab-youtube");
 const tabFacebook = document.getElementById("tab-facebook");
+const tabDirect = document.getElementById("tab-direct");
 
 const viewScribd = document.getElementById("view-scribd");
 const viewYouTube = document.getElementById("view-youtube");
 const viewFacebook = document.getElementById("view-facebook");
+const viewDirect = document.getElementById("view-direct");
 
 // Sections
 const progressSection = document.getElementById("progress-section");
@@ -52,6 +54,17 @@ const fbPreviewTitle = document.getElementById("fb-preview-title");
 const fbPreviewChannel = document.getElementById("fb-preview-channel");
 const fbPreviewDuration = document.getElementById("fb-preview-duration");
 
+// Direct Remote URL Elements
+const directForm = document.getElementById("direct-form");
+const directUrlInput = document.getElementById("direct-url-input");
+const directCustomName = document.getElementById("direct-custom-name");
+const btnDirectSubmit = document.getElementById("btn-direct-submit");
+const btnDirectPaste = document.getElementById("btn-direct-paste");
+const directPreviewCard = document.getElementById("direct-preview-card");
+const directPreviewFilename = document.getElementById("direct-preview-filename");
+const directPreviewSize = document.getElementById("direct-preview-size");
+const directPreviewType = document.getElementById("direct-preview-type");
+
 // Progress UI Elements
 const docTitleDisplay = document.getElementById("doc-title-display");
 const docMetaBadge = document.getElementById("doc-meta-badge");
@@ -72,6 +85,8 @@ const resSize = document.getElementById("res-size");
 const resExtraLabel = document.getElementById("res-extra-label");
 const resExtraVal = document.getElementById("res-extra-val");
 const resDownloadBtn = document.getElementById("res-download-btn");
+const btnCopyLink = document.getElementById("btn-copy-link");
+const copyLinkText = document.getElementById("copy-link-text");
 const resCountdown = document.getElementById("res-countdown");
 const btnReset = document.getElementById("btn-reset");
 const btnRetry = document.getElementById("btn-retry");
@@ -87,7 +102,7 @@ function switchTab(tab) {
   errorSection.classList.add("hidden");
 
   // Reset tab button styles
-  [tabScribd, tabYouTube, tabFacebook].forEach(btn => {
+  [tabScribd, tabYouTube, tabFacebook, tabDirect].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -98,6 +113,7 @@ function switchTab(tab) {
   viewScribd.classList.add("hidden");
   viewYouTube.classList.add("hidden");
   if (viewFacebook) viewFacebook.classList.add("hidden");
+  if (viewDirect) viewDirect.classList.add("hidden");
 
   if (tab === "scribd") {
     tabScribd.classList.add("active");
@@ -117,12 +133,19 @@ function switchTab(tab) {
     if (viewFacebook) viewFacebook.classList.remove("hidden");
     step3Label.innerText = "Tải Luồng Stream";
     fbUrlInput.focus();
+  } else if (tab === "direct") {
+    tabDirect.classList.add("active");
+    tabDirect.classList.remove("text-slate-400");
+    if (viewDirect) viewDirect.classList.remove("hidden");
+    step3Label.innerText = "Tải Stream Tệp";
+    directUrlInput.focus();
   }
 }
 
 if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
 if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
+if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
 
 // ==================== CLIPBOARD PASTE HELPERS ====================
 
@@ -170,6 +193,21 @@ if (btnFbPaste) {
   });
 }
 
+if (btnDirectPaste) {
+  btnDirectPaste.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        directUrlInput.value = text.trim();
+        directUrlInput.focus();
+        fetchDirectPreview(text.trim());
+      }
+    } catch (err) {
+      console.warn("Clipboard access denied", err);
+    }
+  });
+}
+
 // Auto-inspect YouTube Video info on URL change
 let ytInspectTimeout = null;
 if (ytUrlInput) {
@@ -202,6 +240,22 @@ if (fbUrlInput) {
   });
 }
 
+// Auto-inspect Direct Remote URL info on URL change
+let directInspectTimeout = null;
+if (directUrlInput) {
+  directUrlInput.addEventListener("input", (e) => {
+    clearTimeout(directInspectTimeout);
+    const val = e.target.value.trim();
+    if (val.startsWith("http://") || val.startsWith("https://")) {
+      directInspectTimeout = setTimeout(() => {
+        fetchDirectPreview(val);
+      }, 600);
+    } else {
+      directPreviewCard.classList.add("hidden");
+    }
+  });
+}
+
 async function fetchYouTubePreview(url) {
   try {
     const res = await fetch("/api/youtube/info", {
@@ -221,7 +275,6 @@ async function fetchYouTubePreview(url) {
         }
         ytPreviewCard.classList.remove("hidden");
 
-        // Dynamically populate Video Quality Select according to source URL
         if (data.video_qualities && Array.isArray(data.video_qualities) && ytVideoQuality) {
           ytVideoQuality.innerHTML = "";
           data.video_qualities.forEach((q) => {
@@ -232,7 +285,6 @@ async function fetchYouTubePreview(url) {
           });
         }
 
-        // Dynamically populate Audio Quality Select
         if (data.audio_qualities && Array.isArray(data.audio_qualities) && ytAudioQuality) {
           ytAudioQuality.innerHTML = "";
           data.audio_qualities.forEach((q) => {
@@ -268,7 +320,6 @@ async function fetchFacebookPreview(url) {
         }
         fbPreviewCard.classList.remove("hidden");
 
-        // Dynamically populate Video Quality
         if (data.video_qualities && Array.isArray(data.video_qualities) && fbVideoQuality) {
           fbVideoQuality.innerHTML = "";
           data.video_qualities.forEach((q) => {
@@ -279,7 +330,6 @@ async function fetchFacebookPreview(url) {
           });
         }
 
-        // Dynamically populate Audio Quality
         if (data.audio_qualities && Array.isArray(data.audio_qualities) && fbAudioQuality) {
           fbAudioQuality.innerHTML = "";
           data.audio_qualities.forEach((q) => {
@@ -293,6 +343,28 @@ async function fetchFacebookPreview(url) {
     }
   } catch (err) {
     console.debug("Facebook Preview fetch error", err);
+  }
+}
+
+async function fetchDirectPreview(url) {
+  try {
+    const res = await fetch("/api/direct/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    if (res.ok) {
+      const respData = await res.json();
+      const data = respData.data;
+      if (data) {
+        directPreviewFilename.innerText = data.filename || "remote_file";
+        directPreviewSize.innerText = data.file_size_str || "--";
+        directPreviewType.innerText = data.content_type || "application/octet-stream";
+        directPreviewCard.classList.remove("hidden");
+      }
+    }
+  } catch (err) {
+    console.debug("Direct Preview fetch error", err);
   }
 }
 
@@ -414,6 +486,44 @@ if (fbForm) {
   });
 }
 
+// Direct Remote URL Submit
+if (directForm) {
+  directForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = directUrlInput.value.trim();
+    const customFilename = directCustomName ? directCustomName.value.trim() : null;
+
+    if (!url) {
+      alert("Vui lòng nhập đường dẫn URL tệp tin!");
+      return;
+    }
+
+    resetUI();
+    setSubmitting(btnDirectSubmit, true, "Đang kết nối máy chủ tệp tin...");
+    showProgressView();
+
+    try {
+      const response = await fetch("/api/direct/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, custom_filename: customFilename })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải tệp tin từ xa.");
+      }
+
+      currentTaskId = data.task_id;
+      startTrackingProgress(currentTaskId);
+    } catch (err) {
+      showErrorView(err.message);
+    } finally {
+      setSubmitting(btnDirectSubmit, false, "Bắt Đầu Tải Tệp Về Máy Chủ");
+    }
+  });
+}
+
 function setSubmitting(button, isSubmitting, label) {
   if (button) {
     button.disabled = isSubmitting;
@@ -441,17 +551,38 @@ function showResultView(taskData) {
   resSize.innerText = `${taskData.file_size_mb || taskData.pdf_size_mb || 0} MB`;
   
   if (taskData.type === "youtube" || taskData.type === "facebook") {
+    const srcName = taskData.type === "youtube" ? "YouTube" : "Facebook";
     resExtraLabel.innerText = "Định dạng:";
-    resExtraVal.innerText = taskData.format_type === "audio" ? `Audio MP3 (${taskData.quality})` : `Video MP4 (${taskData.quality.toUpperCase()})`;
+    resExtraVal.innerText = taskData.format_type === "audio" ? `${srcName} MP3 (${taskData.quality})` : `${srcName} MP4 (${taskData.quality.toUpperCase()})`;
+  } else if (taskData.type === "direct") {
+    resExtraLabel.innerText = "Tên tệp:";
+    resExtraVal.innerText = taskData.filename || "file.bin";
   } else {
     resExtraLabel.innerText = "Số trang:";
     resExtraVal.innerText = `${taskData.total_pages || 0} trang`;
   }
 
-  resDownloadBtn.href = taskData.download_url || `/api/file/${taskData.task_id}`;
+  const downloadRelUrl = taskData.download_url || `/api/file/${taskData.task_id}`;
+  resDownloadBtn.href = downloadRelUrl;
   resDownloadBtn.setAttribute("download", taskData.filename || "downloaded_media");
 
-  startCountdown(taskData.expires_in_seconds || 1800);
+  // Setup Copy Direct Link Button
+  const fullDownloadUrl = `${window.location.origin}${downloadRelUrl}`;
+  if (btnCopyLink) {
+    btnCopyLink.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(fullDownloadUrl);
+        copyLinkText.innerText = "Đã sao chép link!";
+        setTimeout(() => {
+          copyLinkText.innerText = "Sao Chép Link Tải";
+        }, 2500);
+      } catch (err) {
+        prompt("Sao chép link tải bên dưới:", fullDownloadUrl);
+      }
+    };
+  }
+
+  startCountdown(taskData.expires_in_seconds || 18000); // 5 hours default
   resultSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -493,6 +624,10 @@ if (btnReset) {
       fbUrlInput.value = "";
       fbPreviewCard.classList.add("hidden");
       fbUrlInput.focus();
+    } else if (currentMode === "direct") {
+      directUrlInput.value = "";
+      directPreviewCard.classList.add("hidden");
+      directUrlInput.focus();
     }
   });
 }
@@ -507,6 +642,8 @@ if (btnRetry) {
       ytForm.dispatchEvent(new Event("submit"));
     } else if (currentMode === "facebook") {
       fbForm.dispatchEvent(new Event("submit"));
+    } else if (currentMode === "direct") {
+      directForm.dispatchEvent(new Event("submit"));
     }
   });
 }
@@ -584,6 +721,12 @@ function handleProgressUpdate(data) {
   if (data.type === "youtube" || data.type === "facebook") {
     const srcName = data.type === "youtube" ? "YouTube" : "Facebook";
     docMetaBadge.innerText = data.format_type === "audio" ? `${srcName} MP3 (${data.quality})` : `${srcName} MP4 (${data.quality.toUpperCase()})`;
+    docMetaBadge.classList.remove("hidden");
+    if (data.speed || data.eta) {
+      pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
+    }
+  } else if (data.type === "direct") {
+    docMetaBadge.innerText = `Remote URL File`;
     docMetaBadge.classList.remove("hidden");
     if (data.speed || data.eta) {
       pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
@@ -707,13 +850,14 @@ function startCountdown(seconds) {
   function update() {
     if (remaining <= 0) {
       clearInterval(countdownTimerInterval);
-      resCountdown.innerText = "00:00 (Đã hết hạn)";
+      resCountdown.innerText = "00:00:00 (Đã hết hạn)";
       resDownloadBtn.classList.add("opacity-50", "pointer-events-none");
       return;
     }
-    const mins = Math.floor(remaining / 60);
+    const hours = Math.floor(remaining / 3600);
+    const mins = Math.floor((remaining % 3600) / 60);
     const secs = remaining % 60;
-    resCountdown.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    resCountdown.innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     remaining--;
   }
 
