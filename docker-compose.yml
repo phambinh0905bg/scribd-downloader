@@ -14,3 +14,9 @@ services:
     volumes:
       - /disk1/data/downloads:/app/downloads
     shm_size: 2gb
+    networks:
+      - home-network
+
+networks:
+  home-network:
+    external: true

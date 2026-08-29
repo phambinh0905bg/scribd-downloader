@@ -179,6 +179,7 @@ def create_and_start_container():
             "DEVICE_SCALE_FACTOR=2.0"
         ],
         "HostConfig": {
+            "NetworkMode": "home-network",
             "Binds": [
                 "/disk1/data/downloads:/app/downloads"
             ],
@@ -193,9 +194,14 @@ def create_and_start_container():
                 "Name": "unless-stopped"
             },
             "ShmSize": 2147483648
+        },
+        "NetworkingConfig": {
+            "EndpointsConfig": {
+                "home-network": {}
+            }
         }
-
     }
+
     
     headers = {
         **HEADERS,
