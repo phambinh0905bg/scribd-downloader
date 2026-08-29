@@ -24,6 +24,51 @@ def get_dir_size(path: Path) -> int:
         pass
     return total
 
+def is_task_actively_running(task_id: str) -> bool:
+    """
+    Check if a task is currently actively downloading/rendering in memory.
+    Active tasks must NEVER be deleted.
+    """
+    active_statuses = {"queued", "connecting", "extracting", "rendering", "downloading", "compiling"}
+    
+    # 1. Check Scribd
+    try:
+        from app.downloader import downloader_service
+        t = downloader_service.get_task(task_id)
+        if t and t.status in active_statuses:
+            return True
+    except Exception:
+        pass
+        
+    # 2. Check YouTube
+    try:
+        from app.youtube import youtube_service
+        t = youtube_service.get_task(task_id)
+        if t and t.status in active_statuses:
+            return True
+    except Exception:
+        pass
+        
+    # 3. Check Facebook
+    try:
+        from app.facebook import facebook_service
+        t = facebook_service.get_task(task_id)
+        if t and t.status in active_statuses:
+            return True
+    except Exception:
+        pass
+        
+    # 4. Check Direct Downloader
+    try:
+        from app.direct_downloader import direct_downloader_service
+        t = direct_downloader_service.get_task(task_id)
+        if t and t.status in active_statuses:
+            return True
+    except Exception:
+        pass
+        
+    return False
+
 def delete_task_files(task_id: str) -> bool:
     """Explicitly delete all files and directory associated with a task."""
     if not task_id or "/" in task_id or "\\" in task_id or ".." in task_id:
@@ -76,10 +121,11 @@ def cleanup_expired_and_abandoned_files(
     abandoned_max_minutes: int = 15
 ) -> Dict[str, int]:
     """
-    Smart Multi-tier Cleaner:
-    1. Deletes abandoned/incomplete/temporary files and failed tasks older than 15 minutes.
-    2. Deletes completed tasks older than max_age_minutes (5 hours).
-    3. Purges intermediate temp folders like temp_images.
+    Bulletproof Multi-tier Cleaner:
+    1. NEVER deletes any task currently downloading/rendering or actively writing bytes to disk.
+    2. Completed files are strictly preserved for the FULL 5 HOURS (300 minutes).
+    3. ONLY deletes abandoned/failed/cancelled tasks that have been completely inactive (no I/O) for > 15 minutes.
+    4. Protects the root 'temp' directory from deletion.
     """
     downloads_dir = settings.DOWNLOADS_DIR
     if not downloads_dir.exists():
@@ -98,8 +144,8 @@ def cleanup_expired_and_abandoned_files(
             if item.name in [".gitkeep"]:
                 continue
                 
+            # Protect system temp directory - only clean files inside it
             if item.name == "temp" and item.is_dir():
-                # Clean up expired temp files inside temp folder without deleting the directory itself
                 try:
                     for sub in item.iterdir():
                         try:
@@ -119,34 +165,44 @@ def cleanup_expired_and_abandoned_files(
                 
             try:
                 mtime = item.stat().st_mtime
-
                 age_seconds = now - mtime
                 item_size = get_dir_size(item)
                 
-                is_abandoned = False
-                
+                # RULE 1: If task is currently active in memory, NEVER touch it!
+                if is_task_actively_running(item.name):
+                    continue
+
                 if item.is_dir():
-                    # Check if directory has temp/partial files or temp_images
-                    has_temp_images = (item / "temp_images").exists()
-                    has_part_files = any(f.suffix.lower() in TEMP_EXTENSIONS for f in item.rglob("*") if f.is_file())
-                    files_in_dir = [f for f in item.iterdir() if f.is_file() and f.name != ".gitkeep"]
+                    # RULE 2: Check disk I/O liveness. If any file was written in the last 5 minutes, DO NOT touch!
+                    all_files = [f for f in item.rglob("*") if f.is_file()]
+                    last_write_time = max([f.stat().st_mtime for f in all_files] + [mtime])
+                    if (now - last_write_time) < 300:
+                        continue
+
+                    # Check file contents
+                    has_part_files = any(f.suffix.lower() in TEMP_EXTENSIONS for f in all_files)
+                    has_completed_file = any(f.is_file() and f.suffix.lower() not in TEMP_EXTENSIONS and f.name != ".gitkeep" for f in item.iterdir())
                     
-                    # If older than 15 mins and only contains incomplete files or temp_images
-                    if age_seconds > abandoned_max_seconds:
-                        if has_temp_images or has_part_files or len(files_in_dir) == 0:
-                            is_abandoned = True
-                            
-                    # Clean up inner temp_images if left over
-                    if has_temp_images and age_seconds > 300:
-                        shutil.rmtree(item / "temp_images", ignore_errors=True)
+                    # RULE 3: Completed files are guaranteed 5 HOURS retention!
+                    if has_completed_file and not has_part_files:
+                        if age_seconds > max_age_seconds:
+                            shutil.rmtree(item, ignore_errors=True)
+                            deleted_folders += 1
+                            freed_bytes += item_size
+                            logger.info(f"🗑️ Dọn dẹp tệp đã hết hạn lưu trữ 5 giờ: {item.name} (dung lượng: {round(item_size/(1024*1024), 2)} MB)")
+                        continue
+
+                    # RULE 4: Clean up inner temp_images if left over after rendering
+                    temp_img_dir = item / "temp_images"
+                    if temp_img_dir.exists() and (now - last_write_time) > 300:
+                        shutil.rmtree(temp_img_dir, ignore_errors=True)
                         
-                    # Standard expiration for all tasks
-                    if age_seconds > max_age_seconds or is_abandoned:
+                    # RULE 5: Abandoned/failed tasks (dead I/O > 15 minutes and no completed file)
+                    if age_seconds > abandoned_max_seconds and (now - last_write_time) > abandoned_max_seconds:
                         shutil.rmtree(item, ignore_errors=True)
                         deleted_folders += 1
                         freed_bytes += item_size
-                        reason = "bị người dùng bỏ dở / lỗi tạm" if is_abandoned else "đã hết hạn lưu trữ (5h)"
-                        logger.info(f"🗑️ Dọn dẹp thư mục {item.name} ({reason}, dung lượng: {round(item_size/(1024*1024), 2)} MB)")
+                        logger.info(f"🗑️ Dọn dẹp tác vụ lỗi/bỏ dở quá 15 phút: {item.name} (dung lượng: {round(item_size/(1024*1024), 2)} MB)")
                         
                 else:
                     # Single loose file
@@ -154,7 +210,7 @@ def cleanup_expired_and_abandoned_files(
                         item.unlink(missing_ok=True)
                         deleted_files += 1
                         freed_bytes += item_size
-                        logger.info(f"🗑️ Dọn dẹp tệp tin {item.name} (dung lượng: {round(item_size/(1024*1024), 2)} MB)")
+                        logger.info(f"🗑️ Dọn dẹp tệp tin rời {item.name} (dung lượng: {round(item_size/(1024*1024), 2)} MB)")
                         
             except Exception as e:
                 logger.warning(f"Lỗi kiểm tra/xóa phần tử {item}: {e}")
@@ -189,7 +245,7 @@ def get_storage_stats() -> Dict:
 
     if downloads_dir.exists():
         for item in downloads_dir.iterdir():
-            if item.name == ".gitkeep":
+            if item.name in [".gitkeep", "temp"]:
                 continue
             if item.is_dir() or item.is_file():
                 size = get_dir_size(item)
