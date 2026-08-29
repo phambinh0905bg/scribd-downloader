@@ -5,6 +5,9 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8000 \
     HOST=0.0.0.0
 
+# Cài đặt ffmpeg phục vụ ghép video và convert audio MP3
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Cài đặt toàn bộ wheels offline (tốc độ < 1 giây, 0 byte tải từ internet)

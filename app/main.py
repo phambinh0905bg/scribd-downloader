@@ -10,10 +10,11 @@ from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 from app.config import settings
 from app.downloader import downloader_service, DownloadTask
+from app.youtube import youtube_service, YouTubeTask
 from app.cleanup import start_cleanup_scheduler, cleanup_expired_files, get_storage_stats
 
 # Configure Logging
@@ -25,11 +26,9 @@ logger = logging.getLogger("main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: start cleanup scheduler
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
     logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} started on port {settings.PORT}")
     yield
-    # Shutdown
     cleanup_task.cancel()
     try:
         await cleanup_task
@@ -54,9 +53,19 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 templates = Jinja2Templates(directory=str(templates_dir))
 
 
-class DownloadRequest(BaseModel):
+class ScribdDownloadRequest(BaseModel):
     url: str
     pages: Optional[str] = "all"
+
+
+class YouTubeInfoRequest(BaseModel):
+    url: str
+
+
+class YouTubeDownloadRequest(BaseModel):
+    url: str
+    format_type: Optional[str] = "video"  # "video" or "audio"
+    quality: Optional[str] = "best"       # "1080p", "720p", "480p", "320k", "192k", "128k"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -72,9 +81,10 @@ async def serve_index(request: Request):
     )
 
 
+# --- SCRIBD ENDPOINTS ---
 
 @app.post("/api/download")
-async def start_download(req: DownloadRequest):
+async def start_scribd_download(req: ScribdDownloadRequest):
     url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập đường dẫn URL tài liệu Scribd.")
@@ -86,7 +96,6 @@ async def start_download(req: DownloadRequest):
     task_id = str(uuid.uuid4())[:8]
     task = downloader_service.create_task(task_id, url, req.pages or "all")
     
-    # Launch task in background
     asyncio.create_task(downloader_service.run_download_task(task))
     
     return {
@@ -97,39 +106,110 @@ async def start_download(req: DownloadRequest):
     }
 
 
+# --- YOUTUBE ENDPOINTS ---
+
+@app.post("/api/youtube/info")
+async def get_youtube_video_info(req: YouTubeInfoRequest):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL YouTube.")
+    try:
+        info = await asyncio.to_thread(youtube_service.extract_info, url)
+        return {"status": "success", "data": info}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Không thể đọc thông tin video: {str(e)}")
+
+
+@app.post("/api/youtube/download")
+async def start_youtube_download(req: YouTubeDownloadRequest):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL YouTube.")
+        
+    task_id = str(uuid.uuid4())[:8]
+    task = YouTubeTask(
+        task_id=task_id,
+        url=url,
+        format_type=req.format_type or "video",
+        quality=req.quality or "best"
+    )
+    
+    await youtube_service.start_download_task(task)
+    
+    return {
+        "status": "success",
+        "task_id": task_id,
+        "message": "Đã khởi tạo tác vụ tải video/audio YouTube."
+    }
+
+
+# --- UNIVERSAL STATUS & STREAMING ---
+
 @app.get("/api/status/{task_id}")
 async def get_task_status(task_id: str):
+    # Check Scribd tasks
     task = downloader_service.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ tải hoặc tác vụ đã hết hạn.")
-    return task.to_dict()
+    if task:
+        return task.to_dict()
+        
+    # Check YouTube tasks
+    yt_task = youtube_service.get_task(task_id)
+    if yt_task:
+        return yt_task.to_dict()
+        
+    raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ hoặc tác vụ đã hết hạn.")
 
 
 @app.get("/api/stream/{task_id}")
 async def stream_task_progress(task_id: str):
     """Server-Sent Events (SSE) stream for real-time progress updates."""
+    # Check Scribd tasks
     task = downloader_service.get_task(task_id)
-    if not task:
+    yt_task = youtube_service.get_task(task_id)
+    
+    if not task and not yt_task:
         raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ tải.")
 
     async def event_generator():
-        queue = task.subscribe()
-        try:
-            while True:
-                try:
-                    # Wait for next update or heartbeat
-                    data = await asyncio.wait_for(queue.get(), timeout=15.0)
+        if task:
+            queue = task.subscribe()
+            try:
+                while True:
+                    try:
+                        data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                        if data.get("status") in ["completed", "failed"]:
+                            await asyncio.sleep(0.5)
+                            break
+                    except asyncio.TimeoutError:
+                        yield ": ping\n\n"
+            finally:
+                task.unsubscribe(queue)
+        else:
+            # YouTube polling stream generator
+            last_status = None
+            last_pct = -1
+            last_log_count = 0
+            
+            for _ in range(600):  # max 10 minutes
+                if not yt_task:
+                    break
+                data = yt_task.to_dict()
+                curr_status = data.get("status")
+                curr_pct = data.get("percentage")
+                curr_log_count = len(data.get("logs", []))
+                
+                if curr_status != last_status or curr_pct != last_pct or curr_log_count != last_log_count:
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                    last_status = curr_status
+                    last_pct = curr_pct
+                    last_log_count = curr_log_count
                     
-                    if data.get("status") in ["completed", "failed"]:
-                        # Send final event and close stream
-                        await asyncio.sleep(0.5)
-                        break
-                except asyncio.TimeoutError:
-                    # Send heartbeat ping to keep connection alive
-                    yield ": ping\n\n"
-        finally:
-            task.unsubscribe(queue)
+                if curr_status in ["completed", "failed"]:
+                    await asyncio.sleep(0.5)
+                    break
+                    
+                await asyncio.sleep(0.8)
 
     return StreamingResponse(
         event_generator(),
@@ -143,26 +223,42 @@ async def stream_task_progress(task_id: str):
 
 
 @app.get("/api/file/{task_id}")
-async def download_pdf_file(task_id: str):
+async def download_output_file(task_id: str):
+    # Check Scribd task
     task = downloader_service.get_task(task_id)
-    if not task or task.status != "completed" or not task.pdf_path or not task.pdf_path.exists():
-        # Check if file still exists in downloads folder
-        task_dir = settings.DOWNLOADS_DIR / task_id
-        if task_dir.exists():
-            pdfs = list(task_dir.glob("*.pdf"))
-            if pdfs and pdfs[0].exists():
-                return FileResponse(
-                    path=str(pdfs[0]),
-                    filename=pdfs[0].name,
-                    media_type="application/pdf"
-                )
-        raise HTTPException(status_code=404, detail="File PDF không tồn tại hoặc đã bị dọn dẹp tự động.")
-    
-    return FileResponse(
-        path=str(task.pdf_path),
-        filename=task.clean_filename,
-        media_type="application/pdf"
-    )
+    if task and task.status == "completed" and task.pdf_path and task.pdf_path.exists():
+        return FileResponse(
+            path=str(task.pdf_path),
+            filename=task.clean_filename,
+            media_type="application/pdf"
+        )
+        
+    # Check YouTube task
+    yt_task = youtube_service.get_task(task_id)
+    if yt_task and yt_task.status == "completed" and yt_task.file_path and yt_task.file_path.exists():
+        ext = yt_task.file_path.suffix.lower()
+        content_type = "video/mp4" if ext == ".mp4" else ("audio/mpeg" if ext == ".mp3" else "application/octet-stream")
+        return FileResponse(
+            path=str(yt_task.file_path),
+            filename=yt_task.clean_filename,
+            media_type=content_type
+        )
+        
+    # Check disk folder
+    task_dir = settings.DOWNLOADS_DIR / task_id
+    if task_dir.exists():
+        files = [f for f in task_dir.iterdir() if f.is_file() and f.name != ".gitkeep"]
+        if files:
+            target = max(files, key=lambda f: f.stat().st_size)
+            ext = target.suffix.lower()
+            content_type = "application/pdf" if ext == ".pdf" else ("video/mp4" if ext == ".mp4" else ("audio/mpeg" if ext == ".mp3" else "application/octet-stream"))
+            return FileResponse(
+                path=str(target),
+                filename=target.name,
+                media_type=content_type
+            )
+            
+    raise HTTPException(status_code=404, detail="Tệp tin không tồn tại hoặc đã bị dọn dẹp tự động.")
 
 
 @app.get("/api/storage")

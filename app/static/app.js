@@ -3,125 +3,265 @@ let activeEventSource = null;
 let activePollingInterval = null;
 let countdownTimerInterval = null;
 let currentTaskId = null;
+let currentMode = "scribd"; // "scribd" or "youtube"
 
-// DOM Elements
-const form = document.getElementById("download-form");
-const urlInput = document.getElementById("url-input");
-const pagesInput = document.getElementById("pages-input");
-const btnSubmit = document.getElementById("btn-submit");
-const btnPaste = document.getElementById("btn-paste");
-const btnClear = document.getElementById("btn-clear");
+// Navigation Tabs
+const tabScribd = document.getElementById("tab-scribd");
+const tabYouTube = document.getElementById("tab-youtube");
+const viewScribd = document.getElementById("view-scribd");
+const viewYouTube = document.getElementById("view-youtube");
 
-const inputSection = document.getElementById("input-section");
+// Sections
 const progressSection = document.getElementById("progress-section");
 const resultSection = document.getElementById("result-section");
 const errorSection = document.getElementById("error-section");
 
+// Scribd Elements
+const scribdForm = document.getElementById("scribd-form");
+const scribdUrlInput = document.getElementById("scribd-url-input");
+const scribdPagesInput = document.getElementById("scribd-pages-input");
+const btnScribdSubmit = document.getElementById("btn-scribd-submit");
+const btnScribdPaste = document.getElementById("btn-scribd-paste");
+
+// YouTube Elements
+const ytForm = document.getElementById("youtube-form");
+const ytUrlInput = document.getElementById("yt-url-input");
+const btnYtSubmit = document.getElementById("btn-yt-submit");
+const btnYtPaste = document.getElementById("btn-yt-paste");
+const ytVideoQuality = document.getElementById("yt-video-quality");
+const ytAudioQuality = document.getElementById("yt-audio-quality");
+const ytPreviewCard = document.getElementById("yt-preview-card");
+const ytPreviewThumb = document.getElementById("yt-preview-thumb");
+const ytPreviewTitle = document.getElementById("yt-preview-title");
+const ytPreviewChannel = document.getElementById("yt-preview-channel");
+const ytPreviewDuration = document.getElementById("yt-preview-duration");
+
+// Progress UI Elements
 const docTitleDisplay = document.getElementById("doc-title-display");
 const docMetaBadge = document.getElementById("doc-meta-badge");
 const progressBar = document.getElementById("progress-bar");
 const progressPercentage = document.getElementById("progress-percentage");
 const stageMessage = document.getElementById("stage-message");
 const pageCounter = document.getElementById("page-counter");
+const stepperProgressLine = document.getElementById("stepper-progress-line");
+const step3Label = document.getElementById("step-3-label");
 
 const logConsole = document.getElementById("log-console");
 const toggleLogsBtn = document.getElementById("toggle-logs-btn");
 const logBoxWrapper = document.getElementById("log-box-wrapper");
 
+// Result UI Elements
 const resTitle = document.getElementById("res-title");
-const resPages = document.getElementById("res-pages");
 const resSize = document.getElementById("res-size");
+const resExtraLabel = document.getElementById("res-extra-label");
+const resExtraVal = document.getElementById("res-extra-val");
 const resDownloadBtn = document.getElementById("res-download-btn");
 const resCountdown = document.getElementById("res-countdown");
 const btnReset = document.getElementById("btn-reset");
 const btnRetry = document.getElementById("btn-retry");
 const errorText = document.getElementById("error-text");
 
-// Paste from Clipboard
-if (btnPaste) {
-  btnPaste.addEventListener("click", async () => {
+// ==================== TAB NAVIGATION ====================
+
+function switchTab(tab) {
+  currentMode = tab;
+  resetUI();
+  progressSection.classList.add("hidden");
+  resultSection.classList.add("hidden");
+  errorSection.classList.add("hidden");
+
+  if (tab === "scribd") {
+    tabScribd.classList.add("active");
+    tabScribd.classList.remove("text-slate-400");
+    tabYouTube.classList.remove("active");
+    tabYouTube.classList.add("text-slate-400");
+
+    viewScribd.classList.remove("hidden");
+    viewYouTube.classList.add("hidden");
+    step3Label.innerText = "Gỡ Mờ & Render";
+    scribdUrlInput.focus();
+  } else {
+    tabYouTube.classList.add("active");
+    tabYouTube.classList.remove("text-slate-400");
+    tabScribd.classList.remove("active");
+    tabScribd.classList.add("text-slate-400");
+
+    viewYouTube.classList.remove("hidden");
+    viewScribd.classList.add("hidden");
+    step3Label.innerText = "Tải Luồng Stream";
+    ytUrlInput.focus();
+  }
+}
+
+if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
+if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
+
+// ==================== CLIPBOARD PASTE HELPERS ====================
+
+if (btnScribdPaste) {
+  btnScribdPaste.addEventListener("click", async () => {
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        urlInput.value = text.trim();
-        urlInput.focus();
+        scribdUrlInput.value = text.trim();
+        scribdUrlInput.focus();
       }
     } catch (err) {
-      console.warn("Could not access clipboard", err);
+      console.warn("Clipboard access denied", err);
     }
   });
 }
 
-// Clear Input
-if (btnClear) {
-  btnClear.addEventListener("click", () => {
-    urlInput.value = "";
-    urlInput.focus();
+if (btnYtPaste) {
+  btnYtPaste.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        ytUrlInput.value = text.trim();
+        ytUrlInput.focus();
+        fetchYouTubePreview(text.trim());
+      }
+    } catch (err) {
+      console.warn("Clipboard access denied", err);
+    }
   });
 }
 
-// Toggle Logs
-if (toggleLogsBtn && logBoxWrapper) {
-  toggleLogsBtn.addEventListener("click", () => {
-    logBoxWrapper.classList.toggle("hidden");
-    const isHidden = logBoxWrapper.classList.contains("hidden");
-    toggleLogsBtn.innerText = isHidden ? "Xem nhật ký chi tiết" : "Ẩn nhật ký chi tiết";
+// Auto-inspect YouTube Video info on URL change
+let ytInspectTimeout = null;
+if (ytUrlInput) {
+  ytUrlInput.addEventListener("input", (e) => {
+    clearTimeout(ytInspectTimeout);
+    const val = e.target.value.trim();
+    if (val.includes("youtube.com") || val.includes("youtu.be")) {
+      ytInspectTimeout = setTimeout(() => {
+        fetchYouTubePreview(val);
+      }, 500);
+    } else {
+      ytPreviewCard.classList.add("hidden");
+    }
   });
 }
 
-// Form Submit Handler
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const url = urlInput.value.trim();
-  const pages = pagesInput ? pagesInput.value.trim() : "all";
-
-  if (!url) {
-    alert("Vui lòng nhập đường dẫn URL tài liệu Scribd!");
-    urlInput.focus();
-    return;
-  }
-
-  // Reset states
-  resetUI();
-  setSubmitting(true);
-
+async function fetchYouTubePreview(url) {
   try {
-    const response = await fetch("/api/download", {
+    const res = await fetch("/api/youtube/info", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, pages: pages || "all" })
+      body: JSON.stringify({ url })
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.detail || "Không thể khởi tạo tác vụ tải tài liệu.");
+    if (res.ok) {
+      const respData = await res.json();
+      const data = respData.data;
+      if (data) {
+        ytPreviewTitle.innerText = data.title || "Video YouTube";
+        ytPreviewChannel.innerText = data.uploader || "";
+        ytPreviewDuration.innerText = data.duration || "";
+        if (data.thumbnail) {
+          ytPreviewThumb.src = data.thumbnail;
+        }
+        ytPreviewCard.classList.remove("hidden");
+      }
     }
-
-    currentTaskId = data.task_id;
-    showProgressView();
-    startTrackingProgress(currentTaskId);
   } catch (err) {
-    showErrorView(err.message);
-  } finally {
-    setSubmitting(false);
-  }
-});
-
-function setSubmitting(isSubmitting) {
-  if (btnSubmit) {
-    btnSubmit.disabled = isSubmitting;
-    btnSubmit.innerHTML = isSubmitting
-      ? `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Đang khởi tạo...`
-      : `<span class="flex items-center justify-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Bắt Đầu Tải PDF</span>`;
+    console.debug("Preview fetch error", err);
   }
 }
+
+// ==================== FORM SUBMISSION ====================
+
+// Scribd Submit
+if (scribdForm) {
+  scribdForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = scribdUrlInput.value.trim();
+    const pages = scribdPagesInput.value.trim() || "all";
+
+    if (!url) {
+      alert("Vui lòng nhập đường dẫn tài liệu Scribd!");
+      return;
+    }
+
+    resetUI();
+    setSubmitting(btnScribdSubmit, true, "Đang kết nối Scribd...");
+    showProgressView();
+
+    try {
+      const response = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, pages })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải Scribd.");
+      }
+
+      currentTaskId = data.task_id;
+      startTrackingProgress(currentTaskId);
+    } catch (err) {
+      showErrorView(err.message);
+    } finally {
+      setSubmitting(btnScribdSubmit, false, "Bắt Đầu Tải File PDF");
+    }
+  });
+}
+
+// YouTube Submit
+if (ytForm) {
+  ytForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = ytUrlInput.value.trim();
+    const formatType = document.querySelector('input[name="yt-format-type"]:checked')?.value || "video";
+    const quality = formatType === "video" ? ytVideoQuality.value : ytAudioQuality.value;
+
+    if (!url) {
+      alert("Vui lòng nhập URL video YouTube!");
+      return;
+    }
+
+    resetUI();
+    setSubmitting(btnYtSubmit, true, "Đang phân tích YouTube...");
+    showProgressView();
+
+    try {
+      const response = await fetch("/api/youtube/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, format_type: formatType, quality })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải YouTube.");
+      }
+
+      currentTaskId = data.task_id;
+      startTrackingProgress(currentTaskId);
+    } catch (err) {
+      showErrorView(err.message);
+    } finally {
+      setSubmitting(btnYtSubmit, false, "Bắt Đầu Tải Video / Audio");
+    }
+  });
+}
+
+function setSubmitting(button, isSubmitting, label) {
+  if (button) {
+    button.disabled = isSubmitting;
+    button.innerHTML = isSubmitting
+      ? `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>${label}</span>`
+      : `<span>${label}</span>`;
+  }
+}
+
+// ==================== VIEW SWITCHING ====================
 
 function showProgressView() {
   progressSection.classList.remove("hidden");
   resultSection.classList.add("hidden");
   errorSection.classList.add("hidden");
-  // Scroll to progress
   progressSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -130,11 +270,19 @@ function showResultView(taskData) {
   resultSection.classList.remove("hidden");
   errorSection.classList.add("hidden");
 
-  resTitle.innerText = taskData.title || "Tài liệu Scribd";
-  resPages.innerText = `${taskData.total_pages || 0} trang`;
-  resSize.innerText = `${taskData.pdf_size_mb || 0} MB`;
+  resTitle.innerText = taskData.title || "Tệp tin hoàn tất";
+  resSize.innerText = `${taskData.file_size_mb || taskData.pdf_size_mb || 0} MB`;
+  
+  if (taskData.type === "youtube") {
+    resExtraLabel.innerText = "Định dạng:";
+    resExtraVal.innerText = taskData.format_type === "audio" ? `Audio MP3 (${taskData.quality})` : `Video MP4 (${taskData.quality})`;
+  } else {
+    resExtraLabel.innerText = "Số trang:";
+    resExtraVal.innerText = `${taskData.total_pages || 0} trang`;
+  }
+
   resDownloadBtn.href = taskData.download_url || `/api/file/${taskData.task_id}`;
-  resDownloadBtn.setAttribute("download", taskData.filename || "document.pdf");
+  resDownloadBtn.setAttribute("download", taskData.filename || "downloaded_media");
 
   startCountdown(taskData.expires_in_seconds || 1800);
   resultSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -160,27 +308,47 @@ function resetUI() {
   updateStepper(1);
 }
 
-// Reset & Download Another
+// Reset button
 if (btnReset) {
   btnReset.addEventListener("click", () => {
     resetUI();
     progressSection.classList.add("hidden");
     resultSection.classList.add("hidden");
     errorSection.classList.add("hidden");
-    urlInput.value = "";
-    urlInput.focus();
-    inputSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (currentMode === "scribd") {
+      scribdUrlInput.value = "";
+      scribdUrlInput.focus();
+    } else {
+      ytUrlInput.value = "";
+      ytPreviewCard.classList.add("hidden");
+      ytUrlInput.focus();
+    }
   });
 }
 
+// Retry button
 if (btnRetry) {
   btnRetry.addEventListener("click", () => {
     errorSection.classList.add("hidden");
-    form.dispatchEvent(new Event("submit"));
+    if (currentMode === "scribd") {
+      scribdForm.dispatchEvent(new Event("submit"));
+    } else {
+      ytForm.dispatchEvent(new Event("submit"));
+    }
   });
 }
 
-// Real-Time Progress Tracking via Server-Sent Events
+// Toggle Logs
+if (toggleLogsBtn && logBoxWrapper) {
+  toggleLogsBtn.addEventListener("click", () => {
+    logBoxWrapper.classList.toggle("hidden");
+    const isHidden = logBoxWrapper.classList.contains("hidden");
+    toggleLogsBtn.innerText = isHidden ? "Xem nhật ký chi tiết" : "Ẩn nhật ký chi tiết";
+  });
+}
+
+// ==================== REAL-TIME PROGRESS TRACKING ====================
+
 function startTrackingProgress(taskId) {
   stopTracking();
 
@@ -236,13 +404,24 @@ function stopTracking() {
 }
 
 function handleProgressUpdate(data) {
-  // Update Title & Badges
-  if (data.title && data.title !== "Tài liệu Scribd") {
+  if (data.title && !data.title.includes("Đang khởi tạo") && !data.title.includes("Tài liệu Scribd")) {
     docTitleDisplay.innerText = data.title;
   }
-  if (data.doc_id) {
-    docMetaBadge.innerText = `ID: ${data.doc_id}`;
+
+  if (data.type === "youtube") {
+    docMetaBadge.innerText = data.format_type === "audio" ? `MP3 (${data.quality})` : `MP4 (${data.quality})`;
     docMetaBadge.classList.remove("hidden");
+    if (data.speed || data.eta) {
+      pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
+    }
+  } else {
+    if (data.doc_id) {
+      docMetaBadge.innerText = `ID: ${data.doc_id}`;
+      docMetaBadge.classList.remove("hidden");
+    }
+    if (data.total_pages > 0) {
+      pageCounter.innerText = `Trang: ${data.current_page || 0} / ${data.total_pages}`;
+    }
   }
 
   // Update Progress Bar
@@ -251,14 +430,10 @@ function handleProgressUpdate(data) {
   progressPercentage.innerText = `${pct}%`;
   stageMessage.innerText = data.stage_message || "Đang xử lý...";
 
-  if (data.total_pages > 0) {
-    pageCounter.innerText = `Trang: ${data.current_page || 0} / ${data.total_pages}`;
-  }
-
-  // Update Stepper
+  // Stepper
   mapStatusToStep(data.status, pct);
 
-  // Update Logs
+  // Logs
   if (data.logs && Array.isArray(data.logs)) {
     renderLogs(data.logs);
   }
@@ -268,7 +443,7 @@ function handleProgressUpdate(data) {
     stopTracking();
     setTimeout(() => {
       showResultView(data);
-    }, 800);
+    }, 600);
   } else if (data.status === "failed") {
     stopTracking();
     setTimeout(() => {
@@ -278,86 +453,86 @@ function handleProgressUpdate(data) {
 }
 
 function mapStatusToStep(status, pct) {
-  let step = 1;
-  if (status === "connecting") {
-    step = pct > 10 ? 2 : 1;
-  } else if (status === "extracting") {
-    step = 2;
-  } else if (status === "rendering") {
-    step = 3;
-  } else if (status === "compiling") {
-    step = 4;
-  } else if (status === "completed") {
-    step = 5;
+  if (status === "connecting" || pct <= 15) {
+    updateStepper(1);
+  } else if (status === "extracting" || (pct > 15 && pct <= 25)) {
+    updateStepper(2);
+  } else if (status === "rendering" || status === "downloading" || (pct > 25 && pct <= 85)) {
+    updateStepper(3);
+  } else if (status === "compiling" || (pct > 85 && pct < 100)) {
+    updateStepper(4);
+  } else if (status === "completed" || pct === 100) {
+    updateStepper(5);
   }
-  updateStepper(step);
 }
 
 function updateStepper(activeStep) {
-  for (let i = 1; i <= 5; i++) {
-    const stepEl = document.getElementById(`step-${i}`);
-    if (!stepEl) continue;
-
-    stepEl.classList.remove("active", "completed", "pending");
-    const iconEl = stepEl.querySelector(".step-icon");
-
-    if (i < activeStep) {
-      stepEl.classList.add("completed");
-      if (iconEl) iconEl.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
-    } else if (i === activeStep) {
-      stepEl.classList.add("active");
-      if (iconEl) iconEl.innerHTML = `<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-30"></span><span>${i}</span>`;
-    } else {
-      stepEl.classList.add("pending");
-      if (iconEl) iconEl.innerHTML = `<span>${i}</span>`;
+  const nodes = document.querySelectorAll(".step-node");
+  nodes.forEach((node) => {
+    const step = parseInt(node.getAttribute("data-step"), 10);
+    node.classList.remove("active", "completed");
+    if (step < activeStep) {
+      node.classList.add("completed");
+    } else if (step === activeStep) {
+      node.classList.add("active");
     }
+  });
+
+  if (stepperProgressLine) {
+    const percent = Math.min(100, ((activeStep - 1) / 4) * 100);
+    stepperProgressLine.style.width = `${percent}%`;
   }
 }
 
 function renderLogs(logs) {
-  if (!logConsole) return;
-  const isScrolledToBottom = logConsole.scrollHeight - logConsole.clientHeight <= logConsole.scrollTop + 50;
+  logConsole.innerHTML = "";
+  logs.forEach((log) => {
+    const line = document.createElement("div");
+    line.className = "flex items-start gap-2 leading-relaxed";
 
-  logConsole.innerHTML = logs.map(log => {
     let colorClass = "text-slate-300";
     if (log.level === "error") colorClass = "text-red-400 font-semibold";
-    if (log.level === "warning") colorClass = "text-amber-400";
-    if (log.level === "success") colorClass = "text-emerald-400 font-semibold";
+    else if (log.level === "warning") colorClass = "text-amber-400";
+    else if (log.level === "success") colorClass = "text-emerald-400";
 
-    return `<div class="py-0.5 leading-relaxed"><span class="text-slate-500 mr-2">[${log.time}]</span><span class="${colorClass}">${escapeHtml(log.message)}</span></div>`;
-  }).join("");
+    line.innerHTML = `
+      <span class="text-slate-600 select-none">[${log.time || '--:--:--'}]</span>
+      <span class="${colorClass}">${escapeHtml(log.message || '')}</span>
+    `;
+    logConsole.appendChild(line);
+  });
 
-  if (isScrolledToBottom) {
-    logConsole.scrollTop = logConsole.scrollHeight;
+  if (logBoxWrapper) {
+    logBoxWrapper.scrollTop = logBoxWrapper.scrollHeight;
   }
 }
 
 function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.innerText = text;
-  return div.innerHTML;
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-// Live Countdown Timer
 function startCountdown(seconds) {
-  if (countdownTimerInterval) clearInterval(countdownTimerInterval);
   let remaining = seconds;
+  if (countdownTimerInterval) clearInterval(countdownTimerInterval);
 
-  function updateTimerText() {
+  function update() {
     if (remaining <= 0) {
       clearInterval(countdownTimerInterval);
-      resCountdown.innerText = "File đã hết hạn và được dọn dẹp.";
+      resCountdown.innerText = "00:00 (Đã hết hạn)";
       resDownloadBtn.classList.add("opacity-50", "pointer-events-none");
       return;
     }
     const mins = Math.floor(remaining / 60);
     const secs = remaining % 60;
-    const formatted = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    resCountdown.innerText = `File sẽ tự động xóa sau: ${formatted}`;
+    resCountdown.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     remaining--;
   }
 
-  updateTimerText();
-  countdownTimerInterval = setInterval(updateTimerText, 1000);
+  update();
+  countdownTimerInterval = setInterval(update, 1000);
 }
-

@@ -53,27 +53,40 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Stepper transitions */
-.step-item {
-  transition: all 0.3s ease;
+/* Navigation Tabs */
+.nav-tab-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
 }
 
-.step-item.active .step-icon {
+#tab-youtube.nav-tab-btn.active {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+}
+
+/* Stepper transitions */
+.step-node.completed .w-8 {
+  background-color: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+.step-node.completed span {
+  color: #10b981;
+}
+
+.step-node.active .w-8 {
   background-color: #3b82f6;
   border-color: #60a5fa;
   color: #ffffff;
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
 }
 
-.step-item.completed .step-icon {
-  background-color: #10b981;
-  border-color: #34d399;
-  color: #ffffff;
+.step-node.active span {
+  color: #93c5fd;
+  font-weight: 600;
 }
-
-.step-item.pending .step-icon {
-  background-color: rgba(51, 65, 85, 0.5);
-  border-color: rgba(100, 116, 139, 0.3);
-  color: #94a3b8;
-}
-
