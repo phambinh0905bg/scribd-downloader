@@ -318,18 +318,17 @@ class ScribdDownloaderService:
                         
                         target_url = embed_url
                         try:
-                            await page.goto(target_url, wait_until="networkidle", timeout=35000)
-                        except Exception:
-                            try:
-                                await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
-                            except Exception:
-                                pass
+                            await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                        except Exception as nav_err:
+                            task.add_log(f"Embed URL gặp lỗi ({nav_err}), thử chuyển sang link document trực tiếp...", level="warning")
+                            target_url = fallback_url
+                            await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
                         
                         await wait_for_scribd_challenge(page, task)
                         
                         task.add_log("Đang chờ trình xem tài liệu tải xong các trang...")
                         try:
-                            await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=15000)
+                            await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .newpage, .document_column, .document_container, div[data-page-number]", timeout=15000)
                         except Exception:
                             pass
                             
@@ -361,7 +360,7 @@ class ScribdDownloaderService:
                                            document.title || 
                                            '';
                             
-                            let pages = document.querySelectorAll('.outer_page, div[id^="outer_page_"]');
+                            let pages = document.querySelectorAll('.outer_page, div[id^="outer_page_"], .newpage, div.page, div[data-page-number]');
                             return {
                                 title: docTitle.trim(),
                                 pageCount: pages.length
@@ -375,7 +374,7 @@ class ScribdDownloaderService:
                         if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
                             try:
                                 page_doc: Page = await context.new_page()
-                                await page_doc.goto(fallback_url, wait_until="domcontentloaded", timeout=15000)
+                                await page_doc.goto(fallback_url, wait_until="domcontentloaded", timeout=12000)
                                 doc_meta = await page_doc.evaluate("() => document.querySelector('h1')?.innerText || document.title || ''")
                                 if doc_meta and doc_meta.lower() not in ["scribd", "client challenge"]:
                                     raw_title = doc_meta
@@ -393,22 +392,23 @@ class ScribdDownloaderService:
                         task.clean_filename = f"{safe_name}.pdf"
                         task.add_log(f"Tiêu đề tài liệu: \"{task.title}\"")
                         
-                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
+                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], .newpage, div.page, div[data-page-number]")
                         total_pages_detected = len(page_elements)
                         
                         # Fallback to direct document page if embed had 0 pages
-                        if total_pages_detected == 0:
+                        if total_pages_detected == 0 and target_url != fallback_url:
                             task.add_log(f"Chuyển sang trang tài liệu chính: {fallback_url}...", level="warning")
-                            await page.goto(fallback_url, wait_until="networkidle", timeout=35000)
+                            await page.goto(fallback_url, wait_until="domcontentloaded", timeout=30000)
                             await wait_for_scribd_challenge(page, task)
                             try:
-                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=15000)
+                                await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .newpage, .document_column, .document_container, div[data-page-number]", timeout=15000)
                             except Exception:
                                 pass
                             
                             await page.evaluate(unblur_script)
-                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
+                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], .newpage, div.page, div[data-page-number]")
                             total_pages_detected = len(page_elements)
+
 
 
                         
