@@ -216,9 +216,14 @@ class ScribdDownloaderService:
                 return
 
             try:
+                # Ensure temporary directory exists before launching Playwright
+                settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+                task.task_dir.mkdir(parents=True, exist_ok=True)
+                
                 async with async_playwright() as p:
                     # Clean Docker Chromium args (NO single-process, NO no-zygote)
                     browser: Browser = await p.chromium.launch(
+
                         headless=True,
                         args=[
                             "--no-sandbox",

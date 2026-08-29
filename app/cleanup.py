@@ -95,11 +95,31 @@ def cleanup_expired_and_abandoned_files(
 
     try:
         for item in downloads_dir.iterdir():
-            if item.name == ".gitkeep":
+            if item.name in [".gitkeep"]:
+                continue
+                
+            if item.name == "temp" and item.is_dir():
+                # Clean up expired temp files inside temp folder without deleting the directory itself
+                try:
+                    for sub in item.iterdir():
+                        try:
+                            sub_mtime = sub.stat().st_mtime
+                            if (now - sub_mtime) > abandoned_max_seconds:
+                                sub_size = get_dir_size(sub)
+                                if sub.is_dir():
+                                    shutil.rmtree(sub, ignore_errors=True)
+                                else:
+                                    sub.unlink(missing_ok=True)
+                                freed_bytes += sub_size
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
                 continue
                 
             try:
                 mtime = item.stat().st_mtime
+
                 age_seconds = now - mtime
                 item_size = get_dir_size(item)
                 
