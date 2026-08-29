@@ -347,12 +347,23 @@ class ScribdDownloaderService:
                                            document.title || 
                                            '';
                             
-                            // 4. Extract total page count
-                            let countText = document.querySelector('.pageCount')?.innerText || '';
-                            let match = countText.match(/\\/\\s*(\\d+)/);
-                            let detectedCount = match ? parseInt(match[1], 10) : 0;
+                            // 4. Extract total page count from metadata / window / DOM
+                            let detectedCount = 0;
+                            try {
+                                if (window.__INITIAL_STATE__?.document?.page_count) {
+                                    detectedCount = window.__INITIAL_STATE__.document.page_count;
+                                } else if (window.Scribd?.doc?.page_count) {
+                                    detectedCount = window.Scribd.doc.page_count;
+                                }
+                            } catch(e) {}
                             
-                            let outerPages = document.querySelectorAll('.outer_page, div[id^="outer_page_"], div.newpage, div.page, div.document_page');
+                            if (detectedCount === 0) {
+                                let countText = document.querySelector('.pageCount, .page_counter, [data-testid="page-count"]')?.innerText || '';
+                                let match = countText.match(/(?:\\/|of|trên)\\s*(\\d+)/i);
+                                if (match) detectedCount = parseInt(match[1], 10);
+                            }
+                            
+                            let outerPages = document.querySelectorAll('.outer_page, div[id^="outer_page_"], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper');
                             if (detectedCount === 0) {
                                 detectedCount = outerPages.length;
                             }
@@ -376,7 +387,7 @@ class ScribdDownloaderService:
                         task.add_log(f"Tiêu đề tài liệu: \"{task.title}\"")
                         
                         total_pages_detected = meta.get("pageCount") or 0
-                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page")
+                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper")
                         if total_pages_detected == 0:
                             total_pages_detected = len(page_elements)
                         
@@ -385,13 +396,13 @@ class ScribdDownloaderService:
                             task.add_log(f"Chuyển sang trang tài liệu chính: {fallback_url}...", level="warning")
                             await page.goto(fallback_url, wait_until="domcontentloaded", timeout=30000)
                             try:
-                                await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .document_scroller, .document_container, div[data-page-number]", timeout=10000)
+                                await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .document_scroller, .document_container, div[data-page-number], section[data-page-number], div.page_wrapper", timeout=12000)
                             except Exception:
                                 pass
                             
                             meta = await page.evaluate(unblur_script)
                             total_pages_detected = meta.get("pageCount") or 0
-                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page, div[data-page-number]")
+                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper")
                             if total_pages_detected == 0:
                                 total_pages_detected = len(page_elements)
                         
