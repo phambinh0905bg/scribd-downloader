@@ -369,19 +369,15 @@ class ScribdDownloaderService:
                         """
                         meta = await page.evaluate(unblur_script)
                         
-                        # Fetch title from main page if embed only has generic "Scribd"
+                        # Extract title
                         raw_title = meta.get("title") or ""
                         if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
-                            try:
-                                page_doc: Page = await context.new_page()
-                                await page_doc.goto(fallback_url, wait_until="domcontentloaded", timeout=12000)
-                                doc_meta = await page_doc.evaluate("() => document.querySelector('h1')?.innerText || document.title || ''")
-                                if doc_meta and doc_meta.lower() not in ["scribd", "client challenge"]:
-                                    raw_title = doc_meta
-                                await page_doc.close()
-                            except Exception:
-                                pass
-                                
+                            slug_match = re.search(r'/document/\d+/([^/?#]+)', task.raw_url)
+                            if slug_match:
+                                slug_name = slug_match.group(1).replace('-', ' ').replace('_', ' ').strip().title()
+                                if slug_name and slug_name.lower() not in ["pdf", "download", "doc"]:
+                                    raw_title = slug_name
+                                    
                         raw_title = re.sub(r'\|\s*Scribd.*$', '', raw_title, flags=re.IGNORECASE).strip()
                         raw_title = re.sub(r'\|\s*PDF.*$', '', raw_title, flags=re.IGNORECASE).strip()
                         if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
@@ -408,6 +404,7 @@ class ScribdDownloaderService:
                             await page.evaluate(unblur_script)
                             page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], .newpage, div.page, div[data-page-number]")
                             total_pages_detected = len(page_elements)
+
 
 
 
