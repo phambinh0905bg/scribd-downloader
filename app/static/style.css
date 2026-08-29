@@ -61,26 +61,30 @@
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
 }
 
-#tab-youtube.nav-tab-btn.active {
+#tab-youtube.nav-tab-btn.active,
+#tab-youtube-m.nav-tab-btn.active {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
   border: 1px solid rgba(239, 68, 68, 0.3);
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
 }
 
-#tab-facebook.nav-tab-btn.active {
+#tab-facebook.nav-tab-btn.active,
+#tab-facebook-m.nav-tab-btn.active {
   background: rgba(14, 165, 233, 0.2);
   color: #38bdf8;
   border: 1px solid rgba(14, 165, 233, 0.3);
   box-shadow: 0 0 15px rgba(14, 165, 233, 0.15);
 }
 
-#tab-direct.nav-tab-btn.active {
+#tab-direct.nav-tab-btn.active,
+#tab-direct-m.nav-tab-btn.active {
   background: rgba(16, 185, 129, 0.2);
   color: #34d399;
   border: 1px solid rgba(16, 185, 129, 0.3);
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
 }
+
 
 /* Stepper transitions */
 .step-node.completed .w-8 {
@@ -104,3 +108,8 @@
   color: #93c5fd;
   font-weight: 600;
 }
+
+#progress-bar {
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+

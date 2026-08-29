@@ -68,7 +68,8 @@ class DirectDownloadTask:
     def update_progress(self, status: str, stage_message: str, percentage: int):
         self.status = status
         self.stage_message = stage_message
-        self.percentage = max(0, min(100, percentage))
+        self.percentage = max(self.percentage, max(0, min(100, percentage)))
+
 
     def to_dict(self) -> Dict[str, Any]:
         time_left = max(0, int((self.created_at + (settings.CLEANUP_MINUTES * 60)) - time.time()))
@@ -174,7 +175,7 @@ class DirectDownloaderService:
         asyncio.create_task(self._process_download(task))
 
     async def _process_download(self, task: DirectDownloadTask):
-        task.update_progress("connecting", "Đang kết nối tới máy chủ tệp tin từ xa...", 10)
+        task.update_progress("connecting", "Đang kết nối tới máy chủ tệp tin từ xa...", 0)
         
         def run_stream_download():
             session = requests.Session()
@@ -206,7 +207,7 @@ class DirectDownloaderService:
                 last_update = time.time()
                 last_downloaded = 0
                 
-                chunk_size = 1024 * 1024  # 1MB chunks
+                chunk_size = 512 * 1024  # 512KB chunks for smooth progress updates
                 
                 with open(dest_path, "wb") as f:
                     for chunk in r.iter_content(chunk_size=chunk_size):
@@ -217,7 +218,7 @@ class DirectDownloaderService:
                         task.downloaded_bytes = downloaded
                         
                         now = time.time()
-                        if now - last_update >= 0.5:
+                        if now - last_update >= 0.3:
                             duration = now - start_time
                             interval_duration = now - last_update
                             interval_bytes = downloaded - last_downloaded
@@ -226,18 +227,19 @@ class DirectDownloaderService:
                             speed_mb = speed / (1024 * 1024)
                             task.speed = f"{round(speed_mb, 1)} MB/s"
                             
+                            cur_mb = round(downloaded / (1024 * 1024), 2)
+                            
                             if total_bytes > 0:
-                                pct = int((downloaded / total_bytes) * 88) + 10
-                                remaining_bytes = total_bytes - downloaded
+                                # Direct calculation based purely on downloaded bytes vs total file size
+                                pct = min(99, int((downloaded / total_bytes) * 100))
+                                remaining_bytes = max(0, total_bytes - downloaded)
                                 eta_s = int(remaining_bytes / speed) if speed > 0 else 0
                                 task.eta = f"ETA: {eta_s}s"
                                 
-                                cur_mb = round(downloaded / (1024*1024), 1)
-                                tot_mb = round(total_bytes / (1024*1024), 1)
+                                tot_mb = round(total_bytes / (1024 * 1024), 2)
                                 msg = f"Đang tải: {cur_mb} MB / {tot_mb} MB ({task.speed}) - {task.eta}"
                             else:
-                                pct = min(90, int(15 + (duration * 2)))
-                                cur_mb = round(downloaded / (1024*1024), 1)
+                                pct = min(95, max(1, int(duration * 2)))
                                 msg = f"Đang tải: {cur_mb} MB ({task.speed})"
                                 
                             task.update_progress("downloading", msg, pct)
@@ -247,7 +249,7 @@ class DirectDownloaderService:
                 return dest_path
 
         try:
-            task.update_progress("downloading", "Bắt đầu tải luồng tệp tin...", 15)
+            task.update_progress("downloading", "Bắt đầu tải luồng tệp tin...", 1)
             final_path = await asyncio.to_thread(run_stream_download)
             
             task.file_path = final_path
@@ -262,6 +264,7 @@ class DirectDownloaderService:
             task.error_message = f"Lỗi tải tệp tin từ xa: {str(e)}"
             task.add_log(f"Lỗi: {str(e)}", level="error")
             task.update_progress("failed", task.error_message, 0)
+
 
 direct_downloader_service = DirectDownloaderService()
 

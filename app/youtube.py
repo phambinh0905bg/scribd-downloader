@@ -68,7 +68,8 @@ class YouTubeTask:
     def update_progress(self, status: str, stage_message: str, percentage: int):
         self.status = status
         self.stage_message = stage_message
-        self.percentage = max(0, min(100, percentage))
+        self.percentage = max(self.percentage, max(0, min(100, percentage)))
+
 
     def to_dict(self) -> Dict[str, Any]:
         time_left = max(0, int((self.created_at + (settings.CLEANUP_MINUTES * 60)) - time.time()))
@@ -249,6 +250,9 @@ class YouTubeDownloaderService:
     async def _process_download(self, task: YouTubeTask):
         task.update_progress("connecting", "Đang kết nối tới máy chủ YouTube...", 10)
         
+        current_stream_filename = [None]
+        stream_index = [0]
+        
         def progress_hook(d):
             if d.get("status") == "downloading":
                 total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
@@ -257,9 +261,25 @@ class YouTubeDownloaderService:
                 speed = d.get("speed")
                 eta = d.get("eta")
                 
+                fn = d.get("filename")
+                if fn and fn != current_stream_filename[0]:
+                    current_stream_filename[0] = fn
+                    stream_index[0] += 1
+                
                 pct = 15
                 if total > 0:
-                    pct = 15 + int((downloaded / total) * 72)
+                    ratio = min(1.0, downloaded / total)
+                    if task.format_type == "video":
+                        if stream_index[0] <= 1:
+                            # Stream 1 (Video): 15% -> 70%
+                            pct = 15 + int(ratio * 55)
+                        else:
+                            # Stream 2 (Audio): 70% -> 85%
+                            pct = 70 + int(ratio * 15)
+                    else:
+                        # Audio-only: 15% -> 85%
+                        pct = 15 + int(ratio * 70)
+                        
                     task.total_bytes = total
                     task.downloaded_bytes = downloaded
                 
@@ -272,7 +292,7 @@ class YouTubeDownloaderService:
                 downloaded_mb = round(downloaded / (1024*1024), 1)
                 total_mb = round(total / (1024*1024), 1) if total else "?"
                 
-                msg = f"Đang tải luồng stream: {downloaded_mb} MB / {total_mb} MB"
+                msg = f"Đang tải luồng dữ liệu: {downloaded_mb} MB / {total_mb} MB"
                 if speed_str:
                     msg += f" ({speed_str})"
                 if eta_str:
@@ -283,6 +303,7 @@ class YouTubeDownloaderService:
             elif d.get("status") == "finished":
                 task.update_progress("compiling", "Đang chuyển tiếp tới FFmpeg để xử lý và đóng gói...", 88)
                 task.add_log("✅ Nạp xong luồng stream gốc. Bắt đầu chuyển sang FFmpeg xử lý...")
+
 
         def postprocessor_hook(d):
             status = d.get("status")

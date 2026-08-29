@@ -5,11 +5,16 @@ let countdownTimerInterval = null;
 let currentTaskId = null;
 let currentMode = "scribd"; // "scribd", "youtube", "facebook", or "direct"
 
-// Navigation Tabs
+// Navigation Tabs (Desktop & Mobile)
 const tabScribd = document.getElementById("tab-scribd");
 const tabYouTube = document.getElementById("tab-youtube");
 const tabFacebook = document.getElementById("tab-facebook");
 const tabDirect = document.getElementById("tab-direct");
+
+const tabScribdM = document.getElementById("tab-scribd-m");
+const tabYouTubeM = document.getElementById("tab-youtube-m");
+const tabFacebookM = document.getElementById("tab-facebook-m");
+const tabDirectM = document.getElementById("tab-direct-m");
 
 const viewScribd = document.getElementById("view-scribd");
 const viewYouTube = document.getElementById("view-youtube");
@@ -101,8 +106,8 @@ function switchTab(tab) {
   resultSection.classList.add("hidden");
   errorSection.classList.add("hidden");
 
-  // Reset tab button styles
-  [tabScribd, tabYouTube, tabFacebook, tabDirect].forEach(btn => {
+  // Reset tab button styles (Desktop & Mobile)
+  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -116,26 +121,26 @@ function switchTab(tab) {
   if (viewDirect) viewDirect.classList.add("hidden");
 
   if (tab === "scribd") {
-    tabScribd.classList.add("active");
-    tabScribd.classList.remove("text-slate-400");
+    if (tabScribd) { tabScribd.classList.add("active"); tabScribd.classList.remove("text-slate-400"); }
+    if (tabScribdM) { tabScribdM.classList.add("active"); tabScribdM.classList.remove("text-slate-400"); }
     viewScribd.classList.remove("hidden");
     step3Label.innerText = "Gỡ Mờ & Render";
     scribdUrlInput.focus();
   } else if (tab === "youtube") {
-    tabYouTube.classList.add("active");
-    tabYouTube.classList.remove("text-slate-400");
+    if (tabYouTube) { tabYouTube.classList.add("active"); tabYouTube.classList.remove("text-slate-400"); }
+    if (tabYouTubeM) { tabYouTubeM.classList.add("active"); tabYouTubeM.classList.remove("text-slate-400"); }
     viewYouTube.classList.remove("hidden");
     step3Label.innerText = "Tải Luồng Stream";
     ytUrlInput.focus();
   } else if (tab === "facebook") {
-    tabFacebook.classList.add("active");
-    tabFacebook.classList.remove("text-slate-400");
+    if (tabFacebook) { tabFacebook.classList.add("active"); tabFacebook.classList.remove("text-slate-400"); }
+    if (tabFacebookM) { tabFacebookM.classList.add("active"); tabFacebookM.classList.remove("text-slate-400"); }
     if (viewFacebook) viewFacebook.classList.remove("hidden");
     step3Label.innerText = "Tải Luồng Stream";
     fbUrlInput.focus();
   } else if (tab === "direct") {
-    tabDirect.classList.add("active");
-    tabDirect.classList.remove("text-slate-400");
+    if (tabDirect) { tabDirect.classList.add("active"); tabDirect.classList.remove("text-slate-400"); }
+    if (tabDirectM) { tabDirectM.classList.add("active"); tabDirectM.classList.remove("text-slate-400"); }
     if (viewDirect) viewDirect.classList.remove("hidden");
     step3Label.innerText = "Tải Stream Tệp";
     directUrlInput.focus();
@@ -146,6 +151,12 @@ if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
 if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
 if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
+
+if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
+if (tabYouTubeM) tabYouTubeM.addEventListener("click", () => switchTab("youtube"));
+if (tabFacebookM) tabFacebookM.addEventListener("click", () => switchTab("facebook"));
+if (tabDirectM) tabDirectM.addEventListener("click", () => switchTab("direct"));
+
 
 // ==================== CLIPBOARD PASTE HELPERS ====================
 
@@ -726,11 +737,19 @@ function handleProgressUpdate(data) {
       pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
     }
   } else if (data.type === "direct") {
-    docMetaBadge.innerText = `Remote URL File`;
+    docMetaBadge.innerText = data.filename || `Remote URL File`;
     docMetaBadge.classList.remove("hidden");
-    if (data.speed || data.eta) {
+    if (data.total_bytes > 0) {
+      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(2);
+      const totMb = (data.total_bytes / (1024 * 1024)).toFixed(2);
+      pageCounter.innerText = `${curMb} MB / ${totMb} MB ${data.speed ? '• ' + data.speed : ''} ${data.eta ? '• ' + data.eta : ''}`;
+    } else if (data.downloaded_bytes > 0) {
+      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(2);
+      pageCounter.innerText = `${curMb} MB ${data.speed ? '• ' + data.speed : ''}`;
+    } else if (data.speed || data.eta) {
       pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
     }
+
   } else {
     if (data.doc_id) {
       docMetaBadge.innerText = `ID: ${data.doc_id}`;

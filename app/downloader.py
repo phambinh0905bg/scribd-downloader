@@ -64,12 +64,13 @@ class DownloadTask:
     def update_progress(self, status: str, stage_message: str, percentage: int, current_page: int = None, total_pages: int = None):
         self.status = status
         self.stage_message = stage_message
-        self.percentage = max(0, min(100, percentage))
+        self.percentage = max(self.percentage, max(0, min(100, percentage)))
         if current_page is not None:
             self.current_page = current_page
         if total_pages is not None:
             self.total_pages = total_pages
         self.notify_subscribers()
+
 
     def to_dict(self) -> Dict:
         remaining_seconds = max(0, int(self.expires_at - time.time()))
