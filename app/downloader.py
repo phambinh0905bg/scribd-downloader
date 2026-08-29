@@ -318,39 +318,21 @@ class ScribdDownloaderService:
                         
                         target_url = embed_url
                         try:
-                            response = await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-                        except Exception as nav_err:
-                            task.add_log(f"Embed URL gặp lỗi ({nav_err}), thử chuyển sang link document trực tiếp...", level="warning")
-                            target_url = fallback_url
-                            response = await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
+                            await page.goto(target_url, wait_until="networkidle", timeout=35000)
+                        except Exception:
+                            try:
+                                await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
+                            except Exception:
+                                pass
                         
                         await wait_for_scribd_challenge(page, task)
                         
                         task.add_log("Đang chờ trình xem tài liệu tải xong các trang...")
                         try:
-                            await page.wait_for_selector(".document_column, .outer_page, div[id^='outer_page_'], .document_container, .newpage, .page, .pageCount, .absimg, div[data-page-number]", timeout=12000)
-                        except Exception:
-                            pass
-                        
-                        # Trigger scrolling to load pages
-                        try:
-                            await page.evaluate("""
-                            async () => {
-                                const scroller = document.querySelector('.document_scroller') || document.querySelector('.document_column') || window;
-                                for (let i = 0; i < 4; i++) {
-                                    if (scroller.scrollBy) scroller.scrollBy(0, 1500);
-                                    else window.scrollBy(0, 1500);
-                                    await new Promise(r => setTimeout(r, 250));
-                                }
-                                if (scroller.scrollTo) scroller.scrollTo(0, 0);
-                                else window.scrollTo(0, 0);
-                            }
-                            """)
+                            await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=15000)
                         except Exception:
                             pass
                             
-                        await asyncio.sleep(1.0)
-                        
                         # Step 3: Extract Metadata & Unblur
                         task.update_progress("extracting", "Đang phân tích cấu trúc tài liệu...", 22)
                         
@@ -379,37 +361,30 @@ class ScribdDownloaderService:
                                            document.title || 
                                            '';
                             
-                            // 4. Extract total page count from metadata / window / DOM
-                            let detectedCount = 0;
-                            try {
-                                if (window.__INITIAL_STATE__?.document?.page_count) {
-                                    detectedCount = window.__INITIAL_STATE__.document.page_count;
-                                } else if (window.Scribd?.doc?.page_count) {
-                                    detectedCount = window.Scribd.doc.page_count;
-                                }
-                            } catch(e) {}
-                            
-                            if (detectedCount === 0) {
-                                let countText = document.querySelector('.pageCount, .page_counter, [data-testid="page-count"]')?.innerText || '';
-                                let match = countText.match(/(?:\\/|of|trên)\\s*(\\d+)/i);
-                                if (match) detectedCount = parseInt(match[1], 10);
-                            }
-                            
-                            let outerPages = document.querySelectorAll('.outer_page, div[id^="outer_page_"], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper');
-                            if (detectedCount === 0) {
-                                detectedCount = outerPages.length;
-                            }
-                            
+                            let pages = document.querySelectorAll('.outer_page, div[id^="outer_page_"]');
                             return {
                                 title: docTitle.trim(),
-                                pageCount: detectedCount
+                                pageCount: pages.length
                             };
                         }
                         """
                         meta = await page.evaluate(unblur_script)
                         
-                        raw_title = meta.get("title") or f"Scribd_Document_{doc_id}"
+                        # Fetch title from main page if embed only has generic "Scribd"
+                        raw_title = meta.get("title") or ""
+                        if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
+                            try:
+                                page_doc: Page = await context.new_page()
+                                await page_doc.goto(fallback_url, wait_until="domcontentloaded", timeout=15000)
+                                doc_meta = await page_doc.evaluate("() => document.querySelector('h1')?.innerText || document.title || ''")
+                                if doc_meta and doc_meta.lower() not in ["scribd", "client challenge"]:
+                                    raw_title = doc_meta
+                                await page_doc.close()
+                            except Exception:
+                                pass
+                                
                         raw_title = re.sub(r'\|\s*Scribd.*$', '', raw_title, flags=re.IGNORECASE).strip()
+                        raw_title = re.sub(r'\|\s*PDF.*$', '', raw_title, flags=re.IGNORECASE).strip()
                         if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
                             raw_title = f"Scribd_Document_{doc_id}"
                         
@@ -418,26 +393,23 @@ class ScribdDownloaderService:
                         task.clean_filename = f"{safe_name}.pdf"
                         task.add_log(f"Tiêu đề tài liệu: \"{task.title}\"")
                         
-                        total_pages_detected = meta.get("pageCount") or 0
-                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper")
-                        if total_pages_detected == 0:
-                            total_pages_detected = len(page_elements)
+                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
+                        total_pages_detected = len(page_elements)
                         
                         # Fallback to direct document page if embed had 0 pages
-                        if total_pages_detected == 0 and target_url != fallback_url:
+                        if total_pages_detected == 0:
                             task.add_log(f"Chuyển sang trang tài liệu chính: {fallback_url}...", level="warning")
-                            await page.goto(fallback_url, wait_until="domcontentloaded", timeout=30000)
+                            await page.goto(fallback_url, wait_until="networkidle", timeout=35000)
                             await wait_for_scribd_challenge(page, task)
                             try:
-                                await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .document_scroller, .document_container, div[data-page-number], section[data-page-number], div.page_wrapper", timeout=12000)
+                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=15000)
                             except Exception:
                                 pass
                             
-                            meta = await page.evaluate(unblur_script)
-                            total_pages_detected = meta.get("pageCount") or 0
-                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], div.newpage, div.page, div.document_page, div[data-page-number], section[data-page-number], div.page_wrapper")
-                            if total_pages_detected == 0:
-                                total_pages_detected = len(page_elements)
+                            await page.evaluate(unblur_script)
+                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
+                            total_pages_detected = len(page_elements)
+
 
                         
                         if total_pages_detected == 0:
