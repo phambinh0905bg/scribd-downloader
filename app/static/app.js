@@ -161,12 +161,35 @@ async function fetchYouTubePreview(url) {
           ytPreviewThumb.src = data.thumbnail;
         }
         ytPreviewCard.classList.remove("hidden");
+
+        // Dynamically populate Video Quality Select according to source URL
+        if (data.video_qualities && Array.isArray(data.video_qualities) && ytVideoQuality) {
+          ytVideoQuality.innerHTML = "";
+          data.video_qualities.forEach((q) => {
+            const opt = document.createElement("option");
+            opt.value = q.id;
+            opt.innerText = q.label;
+            ytVideoQuality.appendChild(opt);
+          });
+        }
+
+        // Dynamically populate Audio Quality Select
+        if (data.audio_qualities && Array.isArray(data.audio_qualities) && ytAudioQuality) {
+          ytAudioQuality.innerHTML = "";
+          data.audio_qualities.forEach((q) => {
+            const opt = document.createElement("option");
+            opt.value = q.id;
+            opt.innerText = `${q.label} ${q.note ? '(' + q.note + ')' : ''}`;
+            ytAudioQuality.appendChild(opt);
+          });
+        }
       }
     }
   } catch (err) {
     console.debug("Preview fetch error", err);
   }
 }
+
 
 // ==================== FORM SUBMISSION ====================
 
@@ -490,14 +513,24 @@ function renderLogs(logs) {
     const line = document.createElement("div");
     line.className = "flex items-start gap-2 leading-relaxed";
 
+    const msg = log.message || '';
     let colorClass = "text-slate-300";
-    if (log.level === "error") colorClass = "text-red-400 font-semibold";
-    else if (log.level === "warning") colorClass = "text-amber-400";
-    else if (log.level === "success") colorClass = "text-emerald-400";
+    let prefixTag = "";
+
+    if (log.level === "error") {
+      colorClass = "text-red-400 font-semibold";
+    } else if (log.level === "warning") {
+      colorClass = "text-amber-400";
+    } else if (log.level === "success" || msg.includes("Hoàn tất") || msg.includes("hoàn thành")) {
+      colorClass = "text-emerald-400 font-medium";
+    } else if (msg.includes("FFmpeg") || msg.includes("🎬") || msg.includes("⚙️") || msg.includes("⏳")) {
+      colorClass = "text-purple-300 font-medium";
+      prefixTag = `<span class="px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-300 text-[10px] font-mono border border-purple-700/50 mr-1">FFmpeg</span>`;
+    }
 
     line.innerHTML = `
-      <span class="text-slate-600 select-none">[${log.time || '--:--:--'}]</span>
-      <span class="${colorClass}">${escapeHtml(log.message || '')}</span>
+      <span class="text-slate-600 select-none flex-shrink-0">[${log.time || '--:--:--'}]</span>
+      <span class="${colorClass}">${prefixTag}${escapeHtml(msg)}</span>
     `;
     logConsole.appendChild(line);
   });
@@ -506,6 +539,7 @@ function renderLogs(logs) {
     logBoxWrapper.scrollTop = logBoxWrapper.scrollHeight;
   }
 }
+
 
 function escapeHtml(text) {
   return text

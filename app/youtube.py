@@ -22,7 +22,7 @@ class YouTubeTask:
         self.task_id = task_id
         self.raw_url = url.strip()
         self.format_type = format_type.lower()  # "video" or "audio"
-        self.quality = quality.lower()          # "best", "1080p", "720p", "480p", "320k", "192k", "128k", "m4a"
+        self.quality = quality                  # "best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "320k", "192k", "128k", "m4a"
         
         self.title: str = "Đang phân tích video YouTube..."
         self.uploader: str = ""
@@ -55,8 +55,8 @@ class YouTubeTask:
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
         log_entry = {"time": now_str, "level": level, "message": message}
         self.logs.append(log_entry)
-        if len(self.logs) > 300:
-            self.logs = self.logs[-300:]
+        if len(self.logs) > 400:
+            self.logs = self.logs[-400:]
             
         if level == "error":
             logger.error(f"[{self.task_id}] {message}")
@@ -96,6 +96,37 @@ class YouTubeTask:
             "error_message": self.error_message,
             "logs": self.logs
         }
+
+
+class YtDlpCustomLogger:
+    def __init__(self, task: YouTubeTask):
+        self.task = task
+        
+    def debug(self, msg: str):
+        msg = msg.strip()
+        if not msg:
+            return
+        if "[ffmpeg]" in msg or "[Merger]" in msg or "[ExtractAudio]" in msg or "Destination" in msg or "Converting" in msg or "Merging" in msg:
+            clean_msg = re.sub(r'\x1b\[[0-9;]*m', '', msg)
+            self.task.add_log(f"🎬 {clean_msg}")
+            if "Destination" in clean_msg:
+                self.task.update_progress("compiling", f"FFmpeg đang ghi file: {Path(clean_msg.split(':', 1)[-1].strip()).name}...", 94)
+            elif "Deleting original" in clean_msg:
+                self.task.add_log("🧹 FFmpeg đang dọn dẹp các luồng tạm...")
+                
+    def info(self, msg: str):
+        msg = msg.strip()
+        if not msg:
+            return
+        clean_msg = re.sub(r'\x1b\[[0-9;]*m', '', msg)
+        if "[ffmpeg]" in clean_msg or "[Merger]" in clean_msg or "[ExtractAudio]" in clean_msg:
+            self.task.add_log(f"🎬 {clean_msg}")
+            
+    def warning(self, msg: str):
+        self.task.add_log(f"⚠️ {msg.strip()}", level="warning")
+        
+    def error(self, msg: str):
+        self.task.add_log(f"❌ {msg.strip()}", level="error")
 
 
 class YouTubeDownloaderService:
@@ -141,26 +172,68 @@ class YouTubeDownloaderService:
             thumbnail = info.get("thumbnail") or ""
             description = (info.get("description") or "")[:200]
             
-            # Extract available heights
+            # Extract available heights & build dynamic quality list
             formats = info.get("formats", [])
-            heights = set()
+            seen_heights = set()
+            
+            height_labels = {
+                4320: "8K Ultra HD (4320p)",
+                2160: "4K Ultra HD (2160p)",
+                1440: "2K Quad HD (1440p)",
+                1080: "Full HD (1080p)",
+                720: "HD (720p)",
+                480: "SD (480p)",
+                360: "360p (Tiết kiệm dữ liệu)",
+                240: "240p (Nhẹ)",
+                144: "144p (Rất nhẹ)"
+            }
+            
+            detected_qualities = []
+            
             for f in formats:
                 h = f.get("height")
-                if h and f.get("vcodec") != "none":
-                    heights.add(h)
+                vcodec = f.get("vcodec", "")
+                fps = f.get("fps")
+                if h and vcodec != "none" and h not in seen_heights:
+                    seen_heights.add(h)
+                    base_lbl = height_labels.get(h, f"{h}p")
+                    if fps and fps >= 50:
+                        base_lbl += f" {int(fps)}fps"
+                    detected_qualities.append({
+                        "id": f"{h}p",
+                        "label": base_lbl,
+                        "height": h,
+                        "fps": fps
+                    })
                     
-            sorted_heights = sorted(list(heights), reverse=True)
-            res_options = [f"{h}p" for h in sorted_heights if h in (2160, 1440, 1080, 720, 480, 360, 240)]
-            if not res_options:
-                res_options = ["720p", "480p", "360p"]
-                
+            # Sort qualities by resolution descending
+            sorted_video_qualities = sorted(detected_qualities, key=lambda x: x["height"], reverse=True)
+            
+            # Always have "best" option at the top
+            video_options = [
+                {
+                    "id": "best",
+                    "label": "⭐ Chất lượng cao nhất (Tự động chọn)",
+                    "height": 9999
+                }
+            ] + sorted_video_qualities
+            
+            # Audio Qualities
+            audio_options = [
+                {"id": "320k", "label": "MP3 - 320 kbps (Chất lượng phòng thu)", "note": "Siêu sắc nét"},
+                {"id": "192k", "label": "MP3 - 192 kbps (Tiêu chuẩn cao)", "note": "Khuyến nghị"},
+                {"id": "128k", "label": "MP3 - 128 kbps (Phổ thông / Tiết kiệm dung lượng)", "note": "Nhẹ"},
+                {"id": "m4a", "label": "M4A / AAC (Bản gốc không nén lại)", "note": "Bản gốc"}
+            ]
+            
             return {
                 "title": title,
                 "uploader": uploader,
                 "duration": duration,
                 "thumbnail": thumbnail,
                 "description": description,
-                "resolutions": res_options,
+                "video_qualities": video_options,
+                "audio_qualities": audio_options,
                 "url": url
             }
 
@@ -181,7 +254,7 @@ class YouTubeDownloaderService:
                 
                 pct = 15
                 if total > 0:
-                    pct = 15 + int((downloaded / total) * 75)
+                    pct = 15 + int((downloaded / total) * 72)
                     task.total_bytes = total
                     task.downloaded_bytes = downloaded
                 
@@ -194,7 +267,7 @@ class YouTubeDownloaderService:
                 downloaded_mb = round(downloaded / (1024*1024), 1)
                 total_mb = round(total / (1024*1024), 1) if total else "?"
                 
-                msg = f"Đang tải: {downloaded_mb} MB / {total_mb} MB"
+                msg = f"Đang tải luồng stream: {downloaded_mb} MB / {total_mb} MB"
                 if speed_str:
                     msg += f" ({speed_str})"
                 if eta_str:
@@ -203,25 +276,47 @@ class YouTubeDownloaderService:
                 task.update_progress("downloading", msg, pct)
                 
             elif d.get("status") == "finished":
-                task.update_progress("compiling", "Đang xử lý & hoàn thiện tệp phương tiện...", 92)
-                task.add_log("✅ Quá trình nạp dữ liệu stream hoàn tất. Đang chuyển đổi định dạng...")
+                task.update_progress("compiling", "Đang chuyển tiếp tới FFmpeg để xử lý và đóng gói...", 88)
+                task.add_log("✅ Nạp xong luồng stream gốc. Bắt đầu chuyển sang FFmpeg xử lý...")
+
+        def postprocessor_hook(d):
+            status = d.get("status")
+            pp = d.get("postprocessor")
+            if status == "started":
+                if "ExtractAudio" in str(pp):
+                    task.update_progress("compiling", "FFmpeg: Đang trích xuất & chuyển đổi mã âm thanh sang MP3...", 90)
+                    task.add_log(f"🎬 FFmpeg: Bắt đầu trích xuất âm thanh chất lượng cao ({task.quality})...")
+                elif "Merger" in str(pp):
+                    task.update_progress("compiling", "FFmpeg: Đang ghép hợp nhất luồng Video và Audio HD...", 90)
+                    task.add_log(f"🎬 FFmpeg: Bắt đầu ghép luồng hình ảnh & âm thanh thành file MP4 hoàn chỉnh...")
+                else:
+                    task.update_progress("compiling", f"FFmpeg: Đang xử lý hậu kỳ ({pp})...", 90)
+                    task.add_log(f"🎬 FFmpeg: Khởi chạy module xử lý {pp}...")
+            elif status == "processing":
+                task.add_log(f"⏳ FFmpeg: Đang xử lý chuyển đổi dữ liệu...")
+            elif status == "finished":
+                task.update_progress("compiling", "FFmpeg hoàn tất chuyển đổi! Đang lưu tệp tin thành phẩm...", 97)
+                task.add_log(f"✅ FFmpeg: Hoàn tất chuyển mã & ghép luồng ({pp}).")
 
         def run_ytdlp():
             if not yt_dlp:
                 raise RuntimeError("yt-dlp không được cài đặt.")
                 
             outtmpl = str(task.task_dir / "%(title)s.%(ext)s")
+            custom_logger = YtDlpCustomLogger(task)
             
             ydl_opts: Dict[str, Any] = {
                 "outtmpl": outtmpl,
                 "progress_hooks": [progress_hook],
-                "quiet": True,
-                "no_warnings": True,
+                "postprocessor_hooks": [postprocessor_hook],
+                "logger": custom_logger,
+                "quiet": False,
+                "no_warnings": False,
             }
             
             # Format selection
             if task.format_type == "audio":
-                task.add_log(f"Chế độ tải: Âm thanh (Audio MP3) - Chất lượng: {task.quality}")
+                task.add_log(f"Chế độ tải: Âm thanh (Audio MP3) - Tùy chọn: {task.quality}")
                 quality_map = {
                     "320k": "320",
                     "320": "320",
@@ -251,7 +346,7 @@ class YouTubeDownloaderService:
                 height_match = re.search(r'(\d+)', task.quality)
                 max_h = int(height_match.group(1)) if height_match else 0
                 
-                task.add_log(f"Chế độ tải: Video MP4 - Độ phân giải mục tiêu: {task.quality}")
+                task.add_log(f"Chế độ tải: Video MP4 - Độ phân giải: {task.quality}")
                 
                 if max_h > 0:
                     ydl_opts.update({
@@ -303,7 +398,7 @@ class YouTubeDownloaderService:
             task.file_size_bytes = final_dest.stat().st_size
             task.file_size_mb = round(task.file_size_bytes / (1024 * 1024), 2)
             
-            task.add_log(f"🎉 Tải thành công tệp: {task.clean_filename} ({task.file_size_mb} MB)")
+            task.add_log(f"🎉 Tải & Xử lý FFmpeg thành công: {task.clean_filename} (Dung lượng: {task.file_size_mb} MB)")
             task.add_log(f"⏰ File sẽ tự động lưu trữ và xóa sau {settings.CLEANUP_MINUTES} phút.")
             task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({task.file_size_mb} MB) đã sẵn sàng.", 100)
             
@@ -313,4 +408,3 @@ class YouTubeDownloaderService:
             task.update_progress("failed", task.error_message, 0)
 
 youtube_service = YouTubeDownloaderService()
-
