@@ -333,12 +333,17 @@ class YouTubeDownloaderService:
             
             ydl_opts: Dict[str, Any] = {
                 "outtmpl": outtmpl,
+                "paths": {
+                    "home": str(task.task_dir),
+                    "temp": str(task.task_dir),
+                },
                 "progress_hooks": [progress_hook],
                 "postprocessor_hooks": [postprocessor_hook],
                 "logger": custom_logger,
                 "quiet": False,
                 "no_warnings": False,
             }
+
             
             # Format selection
             if task.format_type == "audio":

@@ -15,9 +15,23 @@ from pydantic import BaseModel
 from app.config import settings
 from app.downloader import downloader_service, DownloadTask
 from app.youtube import youtube_service, YouTubeTask
+
 from app.facebook import facebook_service, FacebookTask
 from app.direct_downloader import direct_downloader_service, DirectDownloadTask
-from app.cleanup import start_cleanup_scheduler, cleanup_expired_files, get_storage_stats
+from app.cleanup import start_cleanup_scheduler, cleanup_expired_and_abandoned_files, get_storage_stats, delete_task_files
+
+
+
+
+
+# Route all system and library temporary files to high-capacity storage (disk1)
+settings.DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+import tempfile
+os.environ["TMPDIR"] = str(settings.TEMP_DIR)
+os.environ["TEMP"] = str(settings.TEMP_DIR)
+os.environ["TMP"] = str(settings.TEMP_DIR)
+tempfile.tempdir = str(settings.TEMP_DIR)
 
 # Configure Logging
 logging.basicConfig(
@@ -29,7 +43,7 @@ logger = logging.getLogger("main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
-    logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} started on port {settings.PORT}")
+    logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} started on port {settings.PORT} | Downloads dir: {settings.DOWNLOADS_DIR}")
     yield
     cleanup_task.cancel()
     try:
@@ -37,6 +51,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     logger.info("Application shutdown complete.")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -385,7 +400,12 @@ async def download_output_file(task_id: str):
                 media_type=content_type
             )
             
-    raise HTTPException(status_code=404, detail="Tệp tin không tồn tại hoặc đã bị dọn dẹp tự động.")
+@app.delete("/api/task/{task_id}")
+@app.post("/api/task/{task_id}/delete")
+@app.post("/api/task/{task_id}/abort")
+async def delete_or_abort_task(task_id: str):
+    success = delete_task_files(task_id)
+    return {"status": "success", "task_id": task_id, "deleted": success}
 
 
 @app.get("/api/storage")
@@ -395,5 +415,6 @@ async def get_storage_info():
 
 @app.post("/api/cleanup")
 async def trigger_manual_cleanup():
-    res = cleanup_expired_files(settings.CLEANUP_MINUTES)
+    res = cleanup_expired_and_abandoned_files(settings.CLEANUP_MINUTES, abandoned_max_minutes=1)
     return {"status": "success", "result": res}
+

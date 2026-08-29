@@ -617,9 +617,51 @@ function resetUI() {
   updateStepper(1);
 }
 
+const btnCancelDownload = document.getElementById("btn-cancel-download");
+const btnDeleteServer = document.getElementById("btn-delete-server");
+
+// Cancel/Abort Download Button
+if (btnCancelDownload) {
+  btnCancelDownload.addEventListener("click", async () => {
+    if (!confirm("Bạn có chắc chắn muốn hủy tải và dọn dẹp các tệp tạm thời không?")) return;
+    if (currentTaskId) {
+      try {
+        await fetch(`/api/task/${currentTaskId}`, { method: "DELETE" });
+      } catch (e) {
+        console.warn("Cancel delete error", e);
+      }
+      currentTaskId = null;
+    }
+    resetUI();
+    progressSection.classList.add("hidden");
+    resultSection.classList.add("hidden");
+    errorSection.classList.add("hidden");
+  });
+}
+
+// Delete from Server Button
+if (btnDeleteServer) {
+  btnDeleteServer.addEventListener("click", async () => {
+    if (!confirm("Xác nhận xóa tệp tin này ngay lập tức khỏi máy chủ lưu trữ?")) return;
+    if (currentTaskId) {
+      try {
+        await fetch(`/api/task/${currentTaskId}`, { method: "DELETE" });
+      } catch (e) {
+        console.warn("Delete error", e);
+      }
+      currentTaskId = null;
+    }
+    resetUI();
+    progressSection.classList.add("hidden");
+    resultSection.classList.add("hidden");
+    errorSection.classList.add("hidden");
+  });
+}
+
 // Reset button
 if (btnReset) {
   btnReset.addEventListener("click", () => {
+    currentTaskId = null;
     resetUI();
     progressSection.classList.add("hidden");
     resultSection.classList.add("hidden");
@@ -658,6 +700,14 @@ if (btnRetry) {
     }
   });
 }
+
+// Beacon auto-cleanup if user closes page during active download
+window.addEventListener("pagehide", () => {
+  if (currentTaskId && activeEventSource) {
+    navigator.sendBeacon(`/api/task/${currentTaskId}/abort`);
+  }
+});
+
 
 // Toggle Logs
 if (toggleLogsBtn && logBoxWrapper) {

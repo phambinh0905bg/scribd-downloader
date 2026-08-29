@@ -12,9 +12,10 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     
-    # Storage Settings
+    # Storage Settings (Mapped to /disk1/data/downloads on Host)
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DOWNLOADS_DIR: Path = BASE_DIR / "downloads"
+    TEMP_DIR: Path = DOWNLOADS_DIR / "temp"
     
     # Auto-cleanup Settings (in minutes - 300 minutes = 5 hours)
     CLEANUP_MINUTES: int = 300
