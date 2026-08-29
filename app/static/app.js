@@ -3,13 +3,16 @@ let activeEventSource = null;
 let activePollingInterval = null;
 let countdownTimerInterval = null;
 let currentTaskId = null;
-let currentMode = "scribd"; // "scribd" or "youtube"
+let currentMode = "scribd"; // "scribd", "youtube", or "facebook"
 
 // Navigation Tabs
 const tabScribd = document.getElementById("tab-scribd");
 const tabYouTube = document.getElementById("tab-youtube");
+const tabFacebook = document.getElementById("tab-facebook");
+
 const viewScribd = document.getElementById("view-scribd");
 const viewYouTube = document.getElementById("view-youtube");
+const viewFacebook = document.getElementById("view-facebook");
 
 // Sections
 const progressSection = document.getElementById("progress-section");
@@ -35,6 +38,19 @@ const ytPreviewThumb = document.getElementById("yt-preview-thumb");
 const ytPreviewTitle = document.getElementById("yt-preview-title");
 const ytPreviewChannel = document.getElementById("yt-preview-channel");
 const ytPreviewDuration = document.getElementById("yt-preview-duration");
+
+// Facebook Elements
+const fbForm = document.getElementById("fb-form");
+const fbUrlInput = document.getElementById("fb-url-input");
+const btnFbSubmit = document.getElementById("btn-fb-submit");
+const btnFbPaste = document.getElementById("btn-fb-paste");
+const fbVideoQuality = document.getElementById("fb-video-quality");
+const fbAudioQuality = document.getElementById("fb-audio-quality");
+const fbPreviewCard = document.getElementById("fb-preview-card");
+const fbPreviewThumb = document.getElementById("fb-preview-thumb");
+const fbPreviewTitle = document.getElementById("fb-preview-title");
+const fbPreviewChannel = document.getElementById("fb-preview-channel");
+const fbPreviewDuration = document.getElementById("fb-preview-duration");
 
 // Progress UI Elements
 const docTitleDisplay = document.getElementById("doc-title-display");
@@ -70,31 +86,43 @@ function switchTab(tab) {
   resultSection.classList.add("hidden");
   errorSection.classList.add("hidden");
 
+  // Reset tab button styles
+  [tabScribd, tabYouTube, tabFacebook].forEach(btn => {
+    if (btn) {
+      btn.classList.remove("active");
+      btn.classList.add("text-slate-400");
+    }
+  });
+
+  // Hide all views
+  viewScribd.classList.add("hidden");
+  viewYouTube.classList.add("hidden");
+  if (viewFacebook) viewFacebook.classList.add("hidden");
+
   if (tab === "scribd") {
     tabScribd.classList.add("active");
     tabScribd.classList.remove("text-slate-400");
-    tabYouTube.classList.remove("active");
-    tabYouTube.classList.add("text-slate-400");
-
     viewScribd.classList.remove("hidden");
-    viewYouTube.classList.add("hidden");
     step3Label.innerText = "Gỡ Mờ & Render";
     scribdUrlInput.focus();
-  } else {
+  } else if (tab === "youtube") {
     tabYouTube.classList.add("active");
     tabYouTube.classList.remove("text-slate-400");
-    tabScribd.classList.remove("active");
-    tabScribd.classList.add("text-slate-400");
-
     viewYouTube.classList.remove("hidden");
-    viewScribd.classList.add("hidden");
     step3Label.innerText = "Tải Luồng Stream";
     ytUrlInput.focus();
+  } else if (tab === "facebook") {
+    tabFacebook.classList.add("active");
+    tabFacebook.classList.remove("text-slate-400");
+    if (viewFacebook) viewFacebook.classList.remove("hidden");
+    step3Label.innerText = "Tải Luồng Stream";
+    fbUrlInput.focus();
   }
 }
 
 if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
+if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
 
 // ==================== CLIPBOARD PASTE HELPERS ====================
 
@@ -127,6 +155,21 @@ if (btnYtPaste) {
   });
 }
 
+if (btnFbPaste) {
+  btnFbPaste.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        fbUrlInput.value = text.trim();
+        fbUrlInput.focus();
+        fetchFacebookPreview(text.trim());
+      }
+    } catch (err) {
+      console.warn("Clipboard access denied", err);
+    }
+  });
+}
+
 // Auto-inspect YouTube Video info on URL change
 let ytInspectTimeout = null;
 if (ytUrlInput) {
@@ -139,6 +182,22 @@ if (ytUrlInput) {
       }, 500);
     } else {
       ytPreviewCard.classList.add("hidden");
+    }
+  });
+}
+
+// Auto-inspect Facebook Video info on URL change
+let fbInspectTimeout = null;
+if (fbUrlInput) {
+  fbUrlInput.addEventListener("input", (e) => {
+    clearTimeout(fbInspectTimeout);
+    const val = e.target.value.trim();
+    if (val.includes("facebook.com") || val.includes("fb.watch")) {
+      fbInspectTimeout = setTimeout(() => {
+        fetchFacebookPreview(val);
+      }, 500);
+    } else {
+      fbPreviewCard.classList.add("hidden");
     }
   });
 }
@@ -186,10 +245,56 @@ async function fetchYouTubePreview(url) {
       }
     }
   } catch (err) {
-    console.debug("Preview fetch error", err);
+    console.debug("YouTube Preview fetch error", err);
   }
 }
 
+async function fetchFacebookPreview(url) {
+  try {
+    const res = await fetch("/api/facebook/info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    if (res.ok) {
+      const respData = await res.json();
+      const data = respData.data;
+      if (data) {
+        fbPreviewTitle.innerText = data.title || "Video Facebook";
+        fbPreviewChannel.innerText = data.uploader || "Facebook User";
+        fbPreviewDuration.innerText = data.duration || "";
+        if (data.thumbnail) {
+          fbPreviewThumb.src = data.thumbnail;
+        }
+        fbPreviewCard.classList.remove("hidden");
+
+        // Dynamically populate Video Quality
+        if (data.video_qualities && Array.isArray(data.video_qualities) && fbVideoQuality) {
+          fbVideoQuality.innerHTML = "";
+          data.video_qualities.forEach((q) => {
+            const opt = document.createElement("option");
+            opt.value = q.id;
+            opt.innerText = q.label;
+            fbVideoQuality.appendChild(opt);
+          });
+        }
+
+        // Dynamically populate Audio Quality
+        if (data.audio_qualities && Array.isArray(data.audio_qualities) && fbAudioQuality) {
+          fbAudioQuality.innerHTML = "";
+          data.audio_qualities.forEach((q) => {
+            const opt = document.createElement("option");
+            opt.value = q.id;
+            opt.innerText = `${q.label} ${q.note ? '(' + q.note + ')' : ''}`;
+            fbAudioQuality.appendChild(opt);
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.debug("Facebook Preview fetch error", err);
+  }
+}
 
 // ==================== FORM SUBMISSION ====================
 
@@ -270,6 +375,45 @@ if (ytForm) {
   });
 }
 
+// Facebook Submit
+if (fbForm) {
+  fbForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = fbUrlInput.value.trim();
+    const formatType = document.querySelector('input[name="fb-format-type"]:checked')?.value || "video";
+    const quality = formatType === "video" ? fbVideoQuality.value : fbAudioQuality.value;
+
+    if (!url) {
+      alert("Vui lòng nhập URL video Facebook!");
+      return;
+    }
+
+    resetUI();
+    setSubmitting(btnFbSubmit, true, "Đang phân tích Facebook...");
+    showProgressView();
+
+    try {
+      const response = await fetch("/api/facebook/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, format_type: formatType, quality })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải Facebook.");
+      }
+
+      currentTaskId = data.task_id;
+      startTrackingProgress(currentTaskId);
+    } catch (err) {
+      showErrorView(err.message);
+    } finally {
+      setSubmitting(btnFbSubmit, false, "Bắt Đầu Tải Video Facebook");
+    }
+  });
+}
+
 function setSubmitting(button, isSubmitting, label) {
   if (button) {
     button.disabled = isSubmitting;
@@ -296,9 +440,9 @@ function showResultView(taskData) {
   resTitle.innerText = taskData.title || "Tệp tin hoàn tất";
   resSize.innerText = `${taskData.file_size_mb || taskData.pdf_size_mb || 0} MB`;
   
-  if (taskData.type === "youtube") {
+  if (taskData.type === "youtube" || taskData.type === "facebook") {
     resExtraLabel.innerText = "Định dạng:";
-    resExtraVal.innerText = taskData.format_type === "audio" ? `Audio MP3 (${taskData.quality})` : `Video MP4 (${taskData.quality})`;
+    resExtraVal.innerText = taskData.format_type === "audio" ? `Audio MP3 (${taskData.quality})` : `Video MP4 (${taskData.quality.toUpperCase()})`;
   } else {
     resExtraLabel.innerText = "Số trang:";
     resExtraVal.innerText = `${taskData.total_pages || 0} trang`;
@@ -341,10 +485,14 @@ if (btnReset) {
     if (currentMode === "scribd") {
       scribdUrlInput.value = "";
       scribdUrlInput.focus();
-    } else {
+    } else if (currentMode === "youtube") {
       ytUrlInput.value = "";
       ytPreviewCard.classList.add("hidden");
       ytUrlInput.focus();
+    } else if (currentMode === "facebook") {
+      fbUrlInput.value = "";
+      fbPreviewCard.classList.add("hidden");
+      fbUrlInput.focus();
     }
   });
 }
@@ -355,8 +503,10 @@ if (btnRetry) {
     errorSection.classList.add("hidden");
     if (currentMode === "scribd") {
       scribdForm.dispatchEvent(new Event("submit"));
-    } else {
+    } else if (currentMode === "youtube") {
       ytForm.dispatchEvent(new Event("submit"));
+    } else if (currentMode === "facebook") {
+      fbForm.dispatchEvent(new Event("submit"));
     }
   });
 }
@@ -427,12 +577,13 @@ function stopTracking() {
 }
 
 function handleProgressUpdate(data) {
-  if (data.title && !data.title.includes("Đang khởi tạo") && !data.title.includes("Tài liệu Scribd")) {
+  if (data.title && !data.title.includes("Đang khởi tạo") && !data.title.includes("Tài liệu Scribd") && !data.title.includes("Đang phân tích")) {
     docTitleDisplay.innerText = data.title;
   }
 
-  if (data.type === "youtube") {
-    docMetaBadge.innerText = data.format_type === "audio" ? `MP3 (${data.quality})` : `MP4 (${data.quality})`;
+  if (data.type === "youtube" || data.type === "facebook") {
+    const srcName = data.type === "youtube" ? "YouTube" : "Facebook";
+    docMetaBadge.innerText = data.format_type === "audio" ? `${srcName} MP3 (${data.quality})` : `${srcName} MP4 (${data.quality.toUpperCase()})`;
     docMetaBadge.classList.remove("hidden");
     if (data.speed || data.eta) {
       pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
@@ -539,7 +690,6 @@ function renderLogs(logs) {
     logBoxWrapper.scrollTop = logBoxWrapper.scrollHeight;
   }
 }
-
 
 function escapeHtml(text) {
   return text

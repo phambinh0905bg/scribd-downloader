@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.downloader import downloader_service, DownloadTask
 from app.youtube import youtube_service, YouTubeTask
+from app.facebook import facebook_service, FacebookTask
 from app.cleanup import start_cleanup_scheduler, cleanup_expired_files, get_storage_stats
 
 # Configure Logging
@@ -65,7 +66,17 @@ class YouTubeInfoRequest(BaseModel):
 class YouTubeDownloadRequest(BaseModel):
     url: str
     format_type: Optional[str] = "video"  # "video" or "audio"
-    quality: Optional[str] = "best"       # "1080p", "720p", "480p", "320k", "192k", "128k"
+    quality: Optional[str] = "best"
+
+
+class FacebookInfoRequest(BaseModel):
+    url: str
+
+
+class FacebookDownloadRequest(BaseModel):
+    url: str
+    format_type: Optional[str] = "video"  # "video" or "audio"
+    quality: Optional[str] = "best"       # "best", "hd", "sd", "320k", "192k", "128k", "m4a"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -117,7 +128,7 @@ async def get_youtube_video_info(req: YouTubeInfoRequest):
         info = await asyncio.to_thread(youtube_service.extract_info, url)
         return {"status": "success", "data": info}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Không thể đọc thông tin video: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Không thể đọc thông tin video YouTube: {str(e)}")
 
 
 @app.post("/api/youtube/download")
@@ -143,19 +154,61 @@ async def start_youtube_download(req: YouTubeDownloadRequest):
     }
 
 
+# --- FACEBOOK ENDPOINTS ---
+
+@app.post("/api/facebook/info")
+async def get_facebook_video_info(req: FacebookInfoRequest):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL Facebook.")
+    try:
+        info = await asyncio.to_thread(facebook_service.extract_info, url)
+        return {"status": "success", "data": info}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Không thể đọc thông tin video Facebook: {str(e)}")
+
+
+@app.post("/api/facebook/download")
+async def start_facebook_download(req: FacebookDownloadRequest):
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập URL Facebook.")
+        
+    task_id = str(uuid.uuid4())[:8]
+    task = FacebookTask(
+        task_id=task_id,
+        url=url,
+        format_type=req.format_type or "video",
+        quality=req.quality or "best"
+    )
+    
+    await facebook_service.start_download_task(task)
+    
+    return {
+        "status": "success",
+        "task_id": task_id,
+        "message": "Đã khởi tạo tác vụ tải video/audio Facebook."
+    }
+
+
 # --- UNIVERSAL STATUS & STREAMING ---
 
 @app.get("/api/status/{task_id}")
 async def get_task_status(task_id: str):
-    # Check Scribd tasks
+    # 1. Check Scribd tasks
     task = downloader_service.get_task(task_id)
     if task:
         return task.to_dict()
         
-    # Check YouTube tasks
+    # 2. Check YouTube tasks
     yt_task = youtube_service.get_task(task_id)
     if yt_task:
         return yt_task.to_dict()
+        
+    # 3. Check Facebook tasks
+    fb_task = facebook_service.get_task(task_id)
+    if fb_task:
+        return fb_task.to_dict()
         
     raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ hoặc tác vụ đã hết hạn.")
 
@@ -163,11 +216,11 @@ async def get_task_status(task_id: str):
 @app.get("/api/stream/{task_id}")
 async def stream_task_progress(task_id: str):
     """Server-Sent Events (SSE) stream for real-time progress updates."""
-    # Check Scribd tasks
     task = downloader_service.get_task(task_id)
     yt_task = youtube_service.get_task(task_id)
+    fb_task = facebook_service.get_task(task_id)
     
-    if not task and not yt_task:
+    if not task and not yt_task and not fb_task:
         raise HTTPException(status_code=404, detail="Không tìm thấy tác vụ tải.")
 
     async def event_generator():
@@ -186,15 +239,16 @@ async def stream_task_progress(task_id: str):
             finally:
                 task.unsubscribe(queue)
         else:
-            # YouTube polling stream generator
+            # Polling stream generator for YouTube and Facebook tasks
+            target_task = yt_task or fb_task
             last_status = None
             last_pct = -1
             last_log_count = 0
             
             for _ in range(600):  # max 10 minutes
-                if not yt_task:
+                if not target_task:
                     break
-                data = yt_task.to_dict()
+                data = target_task.to_dict()
                 curr_status = data.get("status")
                 curr_pct = data.get("percentage")
                 curr_log_count = len(data.get("logs", []))
@@ -241,6 +295,17 @@ async def download_output_file(task_id: str):
         return FileResponse(
             path=str(yt_task.file_path),
             filename=yt_task.clean_filename,
+            media_type=content_type
+        )
+        
+    # Check Facebook task
+    fb_task = facebook_service.get_task(task_id)
+    if fb_task and fb_task.status == "completed" and fb_task.file_path and fb_task.file_path.exists():
+        ext = fb_task.file_path.suffix.lower()
+        content_type = "video/mp4" if ext == ".mp4" else ("audio/mpeg" if ext == ".mp3" else "application/octet-stream")
+        return FileResponse(
+            path=str(fb_task.file_path),
+            filename=fb_task.clean_filename,
             media_type=content_type
         )
         

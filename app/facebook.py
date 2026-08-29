@@ -15,20 +15,20 @@ except ImportError:
 
 from app.config import settings
 
-logger = logging.getLogger("youtube")
+logger = logging.getLogger("facebook")
 
-class YouTubeTask:
+class FacebookTask:
     def __init__(self, task_id: str, url: str, format_type: str = "video", quality: str = "best"):
         self.task_id = task_id
         self.raw_url = url.strip()
         self.format_type = format_type.lower()  # "video" or "audio"
-        self.quality = quality                  # "best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "320k", "192k", "128k", "m4a"
+        self.quality = quality                  # "best", "hd", "sd", "1080p", "720p", "480p", "360p", "320k", "192k", "128k", "m4a"
         
-        self.title: str = "Đang phân tích video YouTube..."
-        self.uploader: str = ""
+        self.title: str = "Đang phân tích video Facebook..."
+        self.uploader: str = "Facebook User"
         self.duration_str: str = ""
         self.thumbnail: str = ""
-        self.clean_filename: str = f"youtube_{task_id}.mp4"
+        self.clean_filename: str = f"facebook_{task_id}.mp4"
         
         self.status: str = "queued"  # queued, connecting, extracting, downloading, compiling, completed, failed
         self.stage_message: str = "Đang khởi tạo tác vụ..."
@@ -49,7 +49,7 @@ class YouTubeTask:
         self.task_dir = settings.DOWNLOADS_DIR / self.task_id
         self.task_dir.mkdir(parents=True, exist_ok=True)
         
-        self.add_log("Khởi tạo tác vụ tải video/audio từ YouTube...")
+        self.add_log("Khởi tạo tác vụ tải video/audio từ Facebook...")
 
     def add_log(self, message: str, level: str = "info"):
         now_str = datetime.datetime.now().strftime("%H:%M:%S")
@@ -74,7 +74,7 @@ class YouTubeTask:
         time_left = max(0, int((self.created_at + (settings.CLEANUP_MINUTES * 60)) - time.time()))
         return {
             "task_id": self.task_id,
-            "type": "youtube",
+            "type": "facebook",
             "url": self.raw_url,
             "title": self.title,
             "uploader": self.uploader,
@@ -98,8 +98,8 @@ class YouTubeTask:
         }
 
 
-class YtDlpCustomLogger:
-    def __init__(self, task: YouTubeTask):
+class FbCustomLogger:
+    def __init__(self, task: FacebookTask):
         self.task = task
         
     def debug(self, msg: str):
@@ -129,18 +129,17 @@ class YtDlpCustomLogger:
         self.task.add_log(f"❌ {msg.strip()}", level="error")
 
 
-class YouTubeDownloaderService:
+class FacebookDownloaderService:
     def __init__(self):
-        self.tasks: Dict[str, YouTubeTask] = {}
-        self.active_downloads = 0
+        self.tasks: Dict[str, FacebookTask] = {}
 
-    def get_task(self, task_id: str) -> Optional[YouTubeTask]:
+    def get_task(self, task_id: str) -> Optional[FacebookTask]:
         return self.tasks.get(task_id)
 
     def sanitize_filename(self, filename: str) -> str:
         clean = re.sub(r'[\\/*?:"<>|]', "", filename)
         clean = re.sub(r'\s+', " ", clean).strip()
-        return clean[:120] if clean else "youtube_media"
+        return clean[:120] if clean else "facebook_media"
 
     def format_duration(self, seconds: Any) -> str:
         if not seconds:
@@ -157,7 +156,7 @@ class YouTubeDownloaderService:
 
 
     def extract_info(self, url: str) -> Dict[str, Any]:
-        """Fetch quick video metadata and available qualities without downloading"""
+        """Fetch quick Facebook video metadata and available qualities"""
         if not yt_dlp:
             raise RuntimeError("Thư viện yt-dlp chưa được cài đặt.")
             
@@ -171,64 +170,40 @@ class YouTubeDownloaderService:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             
-            title = info.get("title", "Video YouTube")
-            uploader = info.get("uploader") or info.get("channel") or ""
+            title = info.get("title") or info.get("description") or "Video Facebook"
+            title = (title.split("\n")[0]).strip()
+            if len(title) > 80:
+                title = title[:80] + "..."
+                
+            uploader = info.get("uploader") or info.get("channel") or "Facebook User"
             duration = self.format_duration(info.get("duration"))
             thumbnail = info.get("thumbnail") or ""
             description = (info.get("description") or "")[:200]
             
-            # Extract available heights & build dynamic quality list
+            # Detect available formats from Facebook
             formats = info.get("formats", [])
-            seen_heights = set()
+            has_hd = any("hd" in str(f.get("format_id", "")).lower() or (f.get("height") and f.get("height") >= 720) for f in formats)
+            has_sd = any("sd" in str(f.get("format_id", "")).lower() or (f.get("height") and f.get("height") < 720) for f in formats)
             
-            height_labels = {
-                4320: "8K Ultra HD (4320p)",
-                2160: "4K Ultra HD (2160p)",
-                1440: "2K Quad HD (1440p)",
-                1080: "Full HD (1080p)",
-                720: "HD (720p)",
-                480: "SD (480p)",
-                360: "360p (Tiết kiệm dữ liệu)",
-                240: "240p (Nhẹ)",
-                144: "144p (Rất nhẹ)"
-            }
-            
-            detected_qualities = []
-            
-            for f in formats:
-                h = f.get("height")
-                vcodec = f.get("vcodec", "")
-                fps = f.get("fps")
-                if h and vcodec != "none" and h not in seen_heights:
-                    seen_heights.add(h)
-                    base_lbl = height_labels.get(h, f"{h}p")
-                    if fps and fps >= 50:
-                        base_lbl += f" {int(fps)}fps"
-                    detected_qualities.append({
-                        "id": f"{h}p",
-                        "label": base_lbl,
-                        "height": h,
-                        "fps": fps
-                    })
-                    
-            # Sort qualities by resolution descending
-            sorted_video_qualities = sorted(detected_qualities, key=lambda x: x["height"], reverse=True)
-            
-            # Always have "best" option at the top
             video_options = [
-                {
-                    "id": "best",
-                    "label": "⭐ Chất lượng cao nhất (Tự động chọn)",
-                    "height": 9999
-                }
-            ] + sorted_video_qualities
-            
-            # Audio Qualities
+                {"id": "best", "label": "⭐ Chất lượng cao nhất (Tự động chọn HD/Gốc)"},
+            ]
+            if has_hd:
+                video_options.append({"id": "hd", "label": "HD (Chất lượng cao / 720p - 1080p)"})
+            if has_sd:
+                video_options.append({"id": "sd", "label": "SD (Chất lượng tiêu chuẩn / Tiết kiệm dữ liệu)"})
+                
+            if len(video_options) == 1:
+                video_options.extend([
+                    {"id": "hd", "label": "HD (720p - 1080p)"},
+                    {"id": "sd", "label": "SD (360p - 480p)"}
+                ])
+                
             audio_options = [
-                {"id": "320k", "label": "MP3 - 320 kbps (Chất lượng phòng thu)", "note": "Siêu sắc nét"},
-                {"id": "192k", "label": "MP3 - 192 kbps (Tiêu chuẩn cao)", "note": "Khuyến nghị"},
-                {"id": "128k", "label": "MP3 - 128 kbps (Phổ thông / Tiết kiệm dung lượng)", "note": "Nhẹ"},
-                {"id": "m4a", "label": "M4A / AAC (Bản gốc không nén lại)", "note": "Bản gốc"}
+                {"id": "320k", "label": "MP3 - 320 kbps (Chất lượng cao)", "note": "Siêu nét"},
+                {"id": "192k", "label": "MP3 - 192 kbps (Tiêu chuẩn)", "note": "Khuyến nghị"},
+                {"id": "128k", "label": "MP3 - 128 kbps (Nhẹ)", "note": "Tiết kiệm dung lượng"},
+                {"id": "m4a", "label": "M4A / AAC (Bản gốc)", "note": "Không nén lại"}
             ]
             
             return {
@@ -242,12 +217,12 @@ class YouTubeDownloaderService:
                 "url": url
             }
 
-    async def start_download_task(self, task: YouTubeTask):
+    async def start_download_task(self, task: FacebookTask):
         self.tasks[task.task_id] = task
         asyncio.create_task(self._process_download(task))
 
-    async def _process_download(self, task: YouTubeTask):
-        task.update_progress("connecting", "Đang kết nối tới máy chủ YouTube...", 10)
+    async def _process_download(self, task: FacebookTask):
+        task.update_progress("connecting", "Đang kết nối tới máy chủ Facebook...", 10)
         
         def progress_hook(d):
             if d.get("status") == "downloading":
@@ -272,7 +247,7 @@ class YouTubeDownloaderService:
                 downloaded_mb = round(downloaded / (1024*1024), 1)
                 total_mb = round(total / (1024*1024), 1) if total else "?"
                 
-                msg = f"Đang tải luồng stream: {downloaded_mb} MB / {total_mb} MB"
+                msg = f"Đang tải video Facebook: {downloaded_mb} MB / {total_mb} MB"
                 if speed_str:
                     msg += f" ({speed_str})"
                 if eta_str:
@@ -281,26 +256,26 @@ class YouTubeDownloaderService:
                 task.update_progress("downloading", msg, pct)
                 
             elif d.get("status") == "finished":
-                task.update_progress("compiling", "Đang chuyển tiếp tới FFmpeg để xử lý và đóng gói...", 88)
-                task.add_log("✅ Nạp xong luồng stream gốc. Bắt đầu chuyển sang FFmpeg xử lý...")
+                task.update_progress("compiling", "Đang chuyển tiếp tới FFmpeg để xử lý & đóng gói...", 88)
+                task.add_log("✅ Nạp xong luồng dữ liệu Facebook. Bắt đầu chuyển sang FFmpeg xử lý...")
 
         def postprocessor_hook(d):
             status = d.get("status")
             pp = d.get("postprocessor")
             if status == "started":
                 if "ExtractAudio" in str(pp):
-                    task.update_progress("compiling", "FFmpeg: Đang trích xuất & chuyển đổi mã âm thanh sang MP3...", 90)
-                    task.add_log(f"🎬 FFmpeg: Bắt đầu trích xuất âm thanh chất lượng cao ({task.quality})...")
+                    task.update_progress("compiling", "FFmpeg: Đang trích xuất & chuyển mã âm thanh sang MP3...", 90)
+                    task.add_log(f"🎬 FFmpeg: Bắt đầu trích xuất âm thanh ({task.quality})...")
                 elif "Merger" in str(pp):
                     task.update_progress("compiling", "FFmpeg: Đang ghép hợp nhất luồng Video và Audio HD...", 90)
-                    task.add_log(f"🎬 FFmpeg: Bắt đầu ghép luồng hình ảnh & âm thanh thành file MP4 hoàn chỉnh...")
+                    task.add_log(f"🎬 FFmpeg: Bắt đầu ghép luồng hình ảnh & âm thanh MP4...")
                 else:
                     task.update_progress("compiling", f"FFmpeg: Đang xử lý hậu kỳ ({pp})...", 90)
                     task.add_log(f"🎬 FFmpeg: Khởi chạy module xử lý {pp}...")
             elif status == "processing":
                 task.add_log(f"⏳ FFmpeg: Đang xử lý chuyển đổi dữ liệu...")
             elif status == "finished":
-                task.update_progress("compiling", "FFmpeg hoàn tất chuyển đổi! Đang lưu tệp tin thành phẩm...", 97)
+                task.update_progress("compiling", "FFmpeg hoàn tất! Đang xuất tệp tin thành phẩm...", 97)
                 task.add_log(f"✅ FFmpeg: Hoàn tất chuyển mã & ghép luồng ({pp}).")
 
         def run_ytdlp():
@@ -308,7 +283,7 @@ class YouTubeDownloaderService:
                 raise RuntimeError("yt-dlp không được cài đặt.")
                 
             outtmpl = str(task.task_dir / "%(title)s.%(ext)s")
-            custom_logger = YtDlpCustomLogger(task)
+            custom_logger = FbCustomLogger(task)
             
             ydl_opts: Dict[str, Any] = {
                 "outtmpl": outtmpl,
@@ -321,7 +296,7 @@ class YouTubeDownloaderService:
             
             # Format selection
             if task.format_type == "audio":
-                task.add_log(f"Chế độ tải: Âm thanh (Audio MP3) - Tùy chọn: {task.quality}")
+                task.add_log(f"Chế độ tải: Âm thanh Facebook (Audio MP3) - Tùy chọn: {task.quality}")
                 quality_map = {
                     "320k": "320",
                     "320": "320",
@@ -348,19 +323,20 @@ class YouTubeDownloaderService:
                     })
             else:
                 # Video format
-                height_match = re.search(r'(\d+)', task.quality)
-                max_h = int(height_match.group(1)) if height_match else 0
-                
-                task.add_log(f"Chế độ tải: Video MP4 - Độ phân giải: {task.quality}")
-                
-                if max_h > 0:
+                task.add_log(f"Chế độ tải: Video Facebook MP4 - Độ phân giải: {task.quality}")
+                if task.quality == "hd":
                     ydl_opts.update({
-                        "format": f"bestvideo[height<={max_h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={max_h}]+bestaudio/best[height<={max_h}]/best",
+                        "format": "bestvideo[height>=720]+bestaudio/best[height>=720]/hd/best",
+                        "merge_output_format": "mp4",
+                    })
+                elif task.quality == "sd":
+                    ydl_opts.update({
+                        "format": "bestvideo[height<720]+bestaudio/best[height<720]/sd/worst",
                         "merge_output_format": "mp4",
                     })
                 else:
                     ydl_opts.update({
-                        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+                        "format": "bestvideo+bestaudio/best",
                         "merge_output_format": "mp4",
                     })
             
@@ -369,25 +345,25 @@ class YouTubeDownloaderService:
                 return info
 
         try:
-            task.add_log("Đang phân tích định dạng và tìm kiếm máy chủ luồng stream...")
-            task.update_progress("extracting", "Đang trích xuất thông tin luồng video/audio...", 15)
+            task.add_log("Đang phân tích cấu trúc video Facebook (Watch/Reel/Post)...")
+            task.update_progress("extracting", "Đang trích xuất thông tin luồng video Facebook...", 15)
             
             info = await asyncio.to_thread(run_ytdlp)
             
-            raw_title = info.get("title", f"YouTube_Media_{task.task_id}")
-            task.title = raw_title
-            task.uploader = info.get("uploader") or info.get("channel") or ""
+            raw_title = info.get("title") or info.get("description") or f"Facebook_Video_{task.task_id}"
+            raw_title = raw_title.split("\n")[0].strip()
+            task.title = raw_title[:80]
+            task.uploader = info.get("uploader") or info.get("channel") or "Facebook User"
             task.duration_str = self.format_duration(info.get("duration"))
             task.thumbnail = info.get("thumbnail") or ""
             
-            task.add_log(f"Tiêu đề: \"{task.title}\" | Thời lượng: {task.duration_str}")
+            task.add_log(f"Tiêu đề: \"{task.title}\" | Tác giả: {task.uploader}")
             
             # Find the downloaded file in task_dir
             downloaded_files = [f for f in task.task_dir.iterdir() if f.is_file()]
             if not downloaded_files:
                 raise RuntimeError("Không tìm thấy tệp đầu ra sau khi tải.")
                 
-            # Pick largest file or matching ext
             final_file = max(downloaded_files, key=lambda f: f.stat().st_size)
             
             safe_name = self.sanitize_filename(task.title)
@@ -403,13 +379,14 @@ class YouTubeDownloaderService:
             task.file_size_bytes = final_dest.stat().st_size
             task.file_size_mb = round(task.file_size_bytes / (1024 * 1024), 2)
             
-            task.add_log(f"🎉 Tải & Xử lý FFmpeg thành công: {task.clean_filename} (Dung lượng: {task.file_size_mb} MB)")
+            task.add_log(f"🎉 Tải & Xử lý Facebook thành công: {task.clean_filename} (Dung lượng: {task.file_size_mb} MB)")
             task.add_log(f"⏰ File sẽ tự động lưu trữ và xóa sau {settings.CLEANUP_MINUTES} phút.")
             task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({task.file_size_mb} MB) đã sẵn sàng.", 100)
             
         except Exception as e:
-            task.error_message = f"Lỗi tải YouTube: {str(e)}"
+            task.error_message = f"Lỗi tải Facebook: {str(e)}"
             task.add_log(f"Lỗi: {str(e)}", level="error")
             task.update_progress("failed", task.error_message, 0)
 
-youtube_service = YouTubeDownloaderService()
+facebook_service = FacebookDownloaderService()
+

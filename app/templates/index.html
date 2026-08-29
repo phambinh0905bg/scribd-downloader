@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ app_name }} - Tải Tài Liệu Scribd & Video/Audio YouTube</title>
+  <title>{{ app_name }} - Tải Scribd, YouTube & Facebook</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -25,6 +25,11 @@
               500: '#ef4444',
               600: '#dc2626',
               700: '#b91c1c',
+            },
+            fb: {
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
             }
           }
         }
@@ -47,7 +52,7 @@
   <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
     <div class="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl"></div>
     <div class="absolute top-1/3 -right-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl"></div>
-    <div class="absolute -bottom-40 left-1/3 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-40 left-1/3 w-96 h-96 bg-sky-600/10 rounded-full blur-3xl"></div>
   </div>
 
   <!-- Header Navigation Bar -->
@@ -56,7 +61,7 @@
       
       <!-- Brand Logo -->
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-red-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-sky-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
           <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
           </svg>
@@ -65,29 +70,40 @@
           <h1 class="font-bold text-lg leading-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
             Media & Doc Hub
           </h1>
-          <p class="text-xs text-slate-400">Scribd PDF & YouTube Downloader</p>
+          <p class="text-xs text-slate-400">Scribd, YouTube & Facebook</p>
         </div>
       </div>
 
       <!-- Header Navigation Menu Tabs -->
       <nav class="flex items-center p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
-        <button id="tab-scribd" class="nav-tab-btn active flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        
+        <!-- Scribd Tab -->
+        <button id="tab-scribd" class="nav-tab-btn active flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
           </svg>
           <span>Scribd PDF</span>
         </button>
         
-        <button id="tab-youtube" class="nav-tab-btn flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-slate-200">
+        <!-- YouTube Tab -->
+        <button id="tab-youtube" class="nav-tab-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-slate-200">
           <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
             <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
           </svg>
-          <span>YouTube Video & Audio</span>
+          <span>YouTube</span>
+        </button>
+
+        <!-- Facebook Tab -->
+        <button id="tab-facebook" class="nav-tab-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-400 hover:text-slate-200">
+          <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+          </svg>
+          <span>Facebook</span>
         </button>
       </nav>
       
       <!-- Right Status Badge -->
-      <div class="hidden md:flex items-center gap-2">
+      <div class="hidden lg:flex items-center gap-2">
         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           Auto-Cleanup: {{ cleanup_minutes }}m
@@ -101,8 +117,6 @@
     
     <!-- ==================== VIEW 1: SCRIBD DOWNLOADER ==================== -->
     <div id="view-scribd" class="space-y-8">
-      
-      <!-- Hero Scribd -->
       <div class="text-center space-y-3 pt-2">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,14 +128,13 @@
           Tải Tài Liệu Scribd <span class="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Sắc Nét & Miễn Phí</span>
         </h2>
         <p class="text-slate-400 max-w-xl mx-auto text-sm sm:text-base">
-          Tự động vượt qua bảo vệ, gỡ bỏ lớp làm mờ và trích xuất tài liệu Scribd thành file PDF hoàn chỉnh.
+          Tự động gỡ bỏ lớp làm mờ và trích xuất tài liệu Scribd thành file PDF hoàn chỉnh.
         </p>
       </div>
 
       <!-- Scribd Input Form -->
       <div id="scribd-input-section" class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
         <form id="scribd-form" class="space-y-5">
-          <!-- URL Input -->
           <div class="space-y-2">
             <label for="scribd-url-input" class="block text-sm font-semibold text-slate-200">
               Đường dẫn tài liệu Scribd <span class="text-blue-400">*</span>
@@ -141,7 +154,7 @@
                 class="w-full pl-11 pr-24 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-inner text-sm sm:text-base"
               >
               <div class="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
-                <button type="button" id="btn-scribd-paste" title="Dán từ Clipboard" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium">
+                <button type="button" id="btn-scribd-paste" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
                   </svg>
@@ -151,7 +164,6 @@
             </div>
           </div>
 
-          <!-- Page Range -->
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <label for="scribd-pages-input" class="block text-sm font-semibold text-slate-200">
@@ -167,7 +179,6 @@
             >
           </div>
 
-          <!-- Submit Button -->
           <button 
             type="submit" 
             id="btn-scribd-submit" 
@@ -185,11 +196,9 @@
 
     <!-- ==================== VIEW 2: YOUTUBE DOWNLOADER ==================== -->
     <div id="view-youtube" class="space-y-8 hidden">
-      
-      <!-- Hero YouTube -->
       <div class="text-center space-y-3 pt-2">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
-          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+          <svg class="w-3.5 h-3.5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
             <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
           </svg>
           Hỗ trợ Video Full HD, 4K & Âm thanh MP3 320kbps
@@ -198,15 +207,13 @@
           Tải Video & Audio <span class="bg-gradient-to-r from-red-500 to-rose-400 bg-clip-text text-transparent">YouTube Nhanh Chóng</span>
         </h2>
         <p class="text-slate-400 max-w-xl mx-auto text-sm sm:text-base">
-          Dán link YouTube (Video, Shorts, Music) để tải video MP4 hoặc trích xuất âm thanh MP3 chất lượng phòng thu.
+          Dán link YouTube (Video, Shorts, Music) để tải video MP4 hoặc trích xuất âm thanh MP3 chất lượng cao.
         </p>
       </div>
 
       <!-- YouTube Input Form -->
       <div id="youtube-input-section" class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
         <form id="youtube-form" class="space-y-5">
-          
-          <!-- YouTube URL -->
           <div class="space-y-2">
             <label for="yt-url-input" class="block text-sm font-semibold text-slate-200">
               Đường dẫn Video YouTube <span class="text-red-400">*</span>
@@ -237,8 +244,6 @@
 
           <!-- Format Choice Buttons -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
-            <!-- Type Video -->
             <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="yt-format-type" value="video" checked class="w-4 h-4 text-red-600 focus:ring-red-500 border-slate-700 bg-slate-800">
@@ -252,16 +257,11 @@
               
               <div class="pl-6">
                 <select id="yt-video-quality" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-red-500">
-                  <option value="best">Chất lượng cao nhất (Tự động)</option>
-                  <option value="1080p">Full HD 1080p</option>
-                  <option value="720p">HD 720p</option>
-                  <option value="480p">480p</option>
-                  <option value="360p">360p (Tiết kiệm dung lượng)</option>
+                  <option value="best">Chất lượng cao nhất (Tự động chọn)</option>
                 </select>
               </div>
             </div>
 
-            <!-- Type Audio -->
             <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
               <label class="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="yt-format-type" value="audio" class="w-4 h-4 text-red-600 focus:ring-red-500 border-slate-700 bg-slate-800">
@@ -275,17 +275,16 @@
               
               <div class="pl-6">
                 <select id="yt-audio-quality" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-red-500">
-                  <option value="320k">MP3 - 320 kbps (Cực sắc nét)</option>
-                  <option value="192k">MP3 - 192 kbps (Tiêu chuẩn)</option>
-                  <option value="128k">MP3 - 128 kbps (Nhẹ)</option>
-                  <option value="m4a">M4A / AAC (Gốc)</option>
+                  <option value="320k">MP3 - 320 kbps (Chất lượng phòng thu)</option>
+                  <option value="192k">MP3 - 192 kbps (Tiêu chuẩn cao)</option>
+                  <option value="128k">MP3 - 128 kbps (Phổ thông)</option>
+                  <option value="m4a">M4A / AAC (Bản gốc)</option>
                 </select>
               </div>
             </div>
-
           </div>
 
-          <!-- YouTube Video Metadata Preview Card (Hidden by default) -->
+          <!-- YouTube Preview Card -->
           <div id="yt-preview-card" class="hidden p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row items-center gap-4">
             <div class="w-full sm:w-40 aspect-video rounded-lg overflow-hidden bg-slate-800 relative flex-shrink-0">
               <img id="yt-preview-thumb" src="" alt="Thumbnail" class="w-full h-full object-cover">
@@ -297,7 +296,6 @@
             </div>
           </div>
 
-          <!-- Submit Button -->
           <button 
             type="submit" 
             id="btn-yt-submit" 
@@ -307,6 +305,125 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
             </svg>
             <span>Bắt Đầu Tải Video / Audio</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+
+    <!-- ==================== VIEW 3: FACEBOOK DOWNLOADER ==================== -->
+    <div id="view-facebook" class="space-y-8 hidden">
+      <div class="text-center space-y-3 pt-2">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
+          <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+          </svg>
+          Hỗ trợ Facebook Reels, Watch, Video Posts & Âm thanh MP3
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+          Tải Video & Audio <span class="bg-gradient-to-r from-sky-400 to-blue-400 bg-clip-text text-transparent">Facebook Dễ Dàng</span>
+        </h2>
+        <p class="text-slate-400 max-w-xl mx-auto text-sm sm:text-base">
+          Dán liên kết Video Facebook (Reels, Watch, Video bài viết) để tải video MP4 HD hoặc tách âm thanh MP3.
+        </p>
+      </div>
+
+      <!-- Facebook Input Form -->
+      <div id="fb-input-section" class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+        <form id="fb-form" class="space-y-5">
+          <div class="space-y-2">
+            <label for="fb-url-input" class="block text-sm font-semibold text-slate-200">
+              Đường dẫn Video Facebook <span class="text-sky-400">*</span>
+            </label>
+            <div class="relative flex items-center">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+              </div>
+              <input 
+                type="url" 
+                id="fb-url-input" 
+                required 
+                placeholder="https://www.facebook.com/watch?v=... hoặc https://www.facebook.com/reel/..." 
+                class="w-full pl-11 pr-24 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all shadow-inner text-sm sm:text-base"
+              >
+              <div class="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
+                <button type="button" id="btn-fb-paste" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                  </svg>
+                  <span class="hidden sm:inline">Dán</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Format Choice Buttons -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="fb-format-type" value="video" checked class="w-4 h-4 text-sky-600 focus:ring-sky-500 border-slate-700 bg-slate-800">
+                <span class="font-semibold text-sm text-slate-100 flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                  </svg>
+                  Tải Video Facebook (MP4)
+                </span>
+              </label>
+              
+              <div class="pl-6">
+                <select id="fb-video-quality" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                  <option value="best">Chất lượng cao nhất (Tự động chọn HD)</option>
+                  <option value="hd">HD (Chất lượng cao / 720p - 1080p)</option>
+                  <option value="sd">SD (Chất lượng tiêu chuẩn)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="fb-format-type" value="audio" class="w-4 h-4 text-sky-600 focus:ring-sky-500 border-slate-700 bg-slate-800">
+                <span class="font-semibold text-sm text-slate-100 flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                  </svg>
+                  Tách Âm Thanh (MP3 / Audio)
+                </span>
+              </label>
+              
+              <div class="pl-6">
+                <select id="fb-audio-quality" class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500">
+                  <option value="320k">MP3 - 320 kbps (Chất lượng cao)</option>
+                  <option value="192k">MP3 - 192 kbps (Tiêu chuẩn)</option>
+                  <option value="128k">MP3 - 128 kbps (Nhẹ)</option>
+                  <option value="m4a">M4A / AAC (Bản gốc)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Facebook Preview Card -->
+          <div id="fb-preview-card" class="hidden p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col sm:flex-row items-center gap-4">
+            <div class="w-full sm:w-40 aspect-video rounded-lg overflow-hidden bg-slate-800 relative flex-shrink-0">
+              <img id="fb-preview-thumb" src="" alt="Thumbnail" class="w-full h-full object-cover">
+              <span id="fb-preview-duration" class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-mono text-white">00:00</span>
+            </div>
+            <div class="flex-1 space-y-1 text-center sm:text-left">
+              <h4 id="fb-preview-title" class="font-bold text-sm text-slate-200 line-clamp-2">Tiêu đề video</h4>
+              <p id="fb-preview-channel" class="text-xs text-slate-400">Facebook User</p>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            id="btn-fb-submit" 
+            class="w-full py-4 px-6 rounded-xl font-bold text-white bg-gradient-to-r from-sky-600 via-sky-500 to-blue-600 hover:from-sky-500 hover:to-blue-500 active:scale-[0.99] transition-all shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+            <span>Bắt Đầu Tải Video Facebook</span>
           </button>
         </form>
       </div>
@@ -382,9 +499,7 @@
           </button>
         </div>
         <div id="log-box-wrapper" class="rounded-xl overflow-hidden border border-slate-800 bg-slate-950/80 p-3 font-mono text-xs max-h-48 overflow-y-auto space-y-1">
-          <div id="log-console" class="space-y-1 text-slate-400">
-            <!-- Logs will be populated here -->
-          </div>
+          <div id="log-console" class="space-y-1 text-slate-400"></div>
         </div>
       </div>
     </div>
@@ -480,7 +595,7 @@
   <footer class="relative z-10 border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
     <div class="max-w-4xl mx-auto px-4 space-y-1">
       <p>{{ app_name }} &bull; Media & Doc Hub &bull; Auto-Cleanup Enabled</p>
-      <p class="text-[11px] text-slate-600">Dịch vụ phục vụ cho mục đích nghiên cứu và học tập cá nhân.</p>
+      <p class="text-[11px] text-slate-600">Hỗ trợ tải tài liệu Scribd, video/audio YouTube & Facebook.</p>
     </div>
   </footer>
 
