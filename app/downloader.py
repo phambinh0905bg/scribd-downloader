@@ -243,59 +243,6 @@ class ScribdDownloaderService:
                         timezone_id="America/New_York"
                     )
 
-                    
-                    # Bypass anti-bot and headless detection
-                    await context.add_init_script("""
-                    () => {
-                        // 1. Remove webdriver
-                        delete Object.getPrototypeOf(navigator).webdriver;
-                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-
-                        // 2. Mock chrome object
-                        window.chrome = {
-                            app: { isInstalled: false },
-                            runtime: {
-                                connect: () => {},
-                                sendMessage: () => {}
-                            }
-                        };
-
-                        // 3. Mock languages & platform
-                        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-                        Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-                        Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-                        Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
-
-                        // 4. Mock Plugins
-                        Object.defineProperty(navigator, 'plugins', {
-                            get: () => [
-                                { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                                { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
-                            ]
-                        });
-
-                        // 5. Mock WebGL Vendor & Renderer
-                        const getParameter = WebGLRenderingContext.prototype.getParameter;
-                        WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                            if (parameter === 37445) return 'Google Inc. (Intel)';
-                            if (parameter === 37446) return 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)';
-                            return getParameter.apply(this, arguments);
-                        };
-
-                        // 6. Mock Permissions
-                        if (navigator.permissions && navigator.permissions.query) {
-                            const origQuery = navigator.permissions.query;
-                            navigator.permissions.query = (parameters) => (
-                                parameters.name === 'notifications' ?
-                                    Promise.resolve({ state: Notification.permission || 'default' }) :
-                                    origQuery(parameters)
-                            );
-                        }
-                    }
-                    """)
-
-                    
                     page: Page = await context.new_page()
                     page.set_default_timeout(35000)
 
@@ -326,13 +273,44 @@ class ScribdDownloaderService:
                         
                         await wait_for_scribd_challenge(page, task)
                         
-                        task.add_log("Đang chờ trình xem tài liệu tải xong các trang...")
+                        # Auto-dismiss cookie / consent modals if any
                         try:
-                            await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=20000)
+                            await page.evaluate("""() => {
+                                const selectors = ['#onetrust-accept-btn-handler', '.cookie-consent-accept', 'button[id*="accept"]', 'button[class*="accept"]', '.close_btn'];
+                                for (const sel of selectors) {
+                                    const btn = document.querySelector(sel);
+                                    if (btn) { btn.click(); break; }
+                                }
+                            }""")
                         except Exception:
                             pass
-                            
-                        await asyncio.sleep(1.0)
+                        
+                        # Robust Progressive Page Detection (up to 3 tries with scroll & reload)
+                        page_elements = []
+                        total_pages_detected = 0
+                        
+                        for attempt in range(1, 4):
+                            task.add_log(f"Đang chờ trình xem tài liệu tải xong các trang (lần {attempt}/3)...")
+                            try:
+                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=12000)
+                            except Exception:
+                                pass
+                                
+                            await asyncio.sleep(1.0)
+                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
+                            total_pages_detected = len(page_elements)
+                            if total_pages_detected > 0:
+                                break
+                                
+                            if attempt < 3:
+                                task.add_log("Tài liệu nạp chậm, đang thử cuộn trang và đồng bộ lại DOM...", level="warning")
+                                await page.evaluate("window.scrollTo(0, 1000); window.scrollTo(0, 0);")
+                                await asyncio.sleep(1.5)
+                                if attempt == 2 and target_url == embed_url:
+                                    try:
+                                        await page.reload(wait_until="domcontentloaded", timeout=20000)
+                                    except Exception:
+                                        pass
                         
                         # Step 3: Extract Metadata & Unblur
                         task.update_progress("extracting", "Đang phân tích cấu trúc tài liệu...", 22)
@@ -406,6 +384,7 @@ class ScribdDownloaderService:
                                 total_pages_detected = len(page_elements)
                             except Exception:
                                 pass
+
 
 
 
