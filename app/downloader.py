@@ -328,10 +328,12 @@ class ScribdDownloaderService:
                         
                         task.add_log("Đang chờ trình xem tài liệu tải xong các trang...")
                         try:
-                            await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .newpage, .document_column, .document_container, div[data-page-number]", timeout=15000)
+                            await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=20000)
                         except Exception:
                             pass
                             
+                        await asyncio.sleep(1.0)
+                        
                         # Step 3: Extract Metadata & Unblur
                         task.update_progress("extracting", "Đang phân tích cấu trúc tài liệu...", 22)
                         
@@ -360,7 +362,7 @@ class ScribdDownloaderService:
                                            document.title || 
                                            '';
                             
-                            let pages = document.querySelectorAll('.outer_page, div[id^="outer_page_"], .newpage, div.page, div[data-page-number]');
+                            let pages = document.querySelectorAll('.outer_page, div[id^="outer_page_"]');
                             return {
                                 title: docTitle.trim(),
                                 pageCount: pages.length
@@ -388,22 +390,23 @@ class ScribdDownloaderService:
                         task.clean_filename = f"{safe_name}.pdf"
                         task.add_log(f"Tiêu đề tài liệu: \"{task.title}\"")
                         
-                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], .newpage, div.page, div[data-page-number]")
+                        page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
                         total_pages_detected = len(page_elements)
                         
                         # Fallback to direct document page if embed had 0 pages
                         if total_pages_detected == 0 and target_url != fallback_url:
                             task.add_log(f"Chuyển sang trang tài liệu chính: {fallback_url}...", level="warning")
-                            await page.goto(fallback_url, wait_until="domcontentloaded", timeout=30000)
-                            await wait_for_scribd_challenge(page, task)
                             try:
-                                await page.wait_for_selector(".outer_page, div[id^='outer_page_'], .newpage, .document_column, .document_container, div[data-page-number]", timeout=15000)
+                                await page.goto(fallback_url, wait_until="domcontentloaded", timeout=20000)
+                                await wait_for_scribd_challenge(page, task)
+                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=15000)
+                                await asyncio.sleep(1.0)
+                                await page.evaluate(unblur_script)
+                                page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
+                                total_pages_detected = len(page_elements)
                             except Exception:
                                 pass
-                            
-                            await page.evaluate(unblur_script)
-                            page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_'], .newpage, div.page, div[data-page-number]")
-                            total_pages_detected = len(page_elements)
+
 
 
 
