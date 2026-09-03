@@ -5,8 +5,13 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8000 \
     HOST=0.0.0.0
 
-# Cài đặt ffmpeg phục vụ ghép video và convert audio MP3
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+# Cài đặt ffmpeg và Tesseract OCR (Tiếng Việt & Tiếng Anh)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-vie \
+    tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

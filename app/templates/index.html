@@ -101,12 +101,12 @@
             <span>YouTube</span>
           </button>
 
-          <!-- Facebook Tab -->
+          <!-- Social Media Tab (Facebook, TikTok, Instagram) -->
           <button id="tab-facebook" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
             <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
               <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
             </svg>
-            <span>Facebook</span>
+            <span>Mạng Xã Hội</span>
           </button>
 
           <!-- Remote Direct URL Tab -->
@@ -125,16 +125,32 @@
             <span>Tệp Của Tôi</span>
             <span id="files-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono">0</span>
           </button>
+
+          <!-- Quick PDF & Media Tools Tab -->
+          <button id="tab-tools" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+            </svg>
+            <span>Công Cụ</span>
+          </button>
         </nav>
         
         <!-- Right Action & Status Badges -->
         <div class="flex items-center gap-2 flex-shrink-0">
+          <!-- Telegram Bot Settings Button -->
+          <button id="btn-open-telegram" type="button" title="Cấu hình gửi tệp về Telegram" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-all cursor-pointer">
+            <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/>
+            </svg>
+            <span class="hidden sm:inline">Telegram</span>
+          </button>
+
           <!-- 1-Click Bookmarklet Tool Button -->
           <button id="btn-open-bookmarklet" type="button" title="Cài đặt Bookmarklet 1-Click tải nhanh" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
-            <span class="hidden sm:inline">1-Click Bookmarklet</span>
+            <span class="hidden sm:inline">Bookmarklet</span>
           </button>
 
           <span class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -146,41 +162,48 @@
 
       <!-- Mobile Navigation Bar (Always visible on mobile < md) -->
       <div class="md:hidden pb-3 pt-1 border-t border-slate-800/60">
-        <nav class="grid grid-cols-5 gap-1 p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
+        <nav class="grid grid-cols-6 gap-1 p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
           
-          <button id="tab-scribd-m" class="nav-tab-btn active flex items-center justify-center gap-1 px-1 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap">
+          <button id="tab-scribd-m" class="nav-tab-btn active flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap">
             <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
             </svg>
-            <span class="truncate text-[10px]">Scribd</span>
+            <span class="truncate text-[9px]">Scribd</span>
           </button>
           
-          <button id="tab-youtube-m" class="nav-tab-btn flex items-center justify-center gap-1 px-1 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <button id="tab-youtube-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
             <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
               <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
             </svg>
-            <span class="truncate text-[10px]">YouTube</span>
+            <span class="truncate text-[9px]">YouTube</span>
           </button>
 
-          <button id="tab-facebook-m" class="nav-tab-btn flex items-center justify-center gap-1 px-1 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <button id="tab-facebook-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
             <svg class="w-3.5 h-3.5 text-sky-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
               <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
             </svg>
-            <span class="truncate text-[10px]">Facebook</span>
+            <span class="truncate text-[9px]">Mạng XH</span>
           </button>
 
-          <button id="tab-direct-m" class="nav-tab-btn flex items-center justify-center gap-1 px-1 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <button id="tab-direct-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
             <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
             </svg>
-            <span class="truncate text-[10px]">URL Tệp</span>
+            <span class="truncate text-[9px]">URL Tệp</span>
           </button>
 
-          <button id="tab-files-m" class="nav-tab-btn flex items-center justify-center gap-1 px-1 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+          <button id="tab-files-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
             <svg class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
             </svg>
-            <span class="truncate text-[10px]">Tệp</span>
+            <span class="truncate text-[9px]">Tệp</span>
+          </button>
+
+          <button id="tab-tools-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+            <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+            </svg>
+            <span class="truncate text-[9px]">Công Cụ</span>
           </button>
         </nav>
       </div>
@@ -253,7 +276,28 @@
               id="scribd-pages-input" 
               placeholder="all (hoặc ví dụ: 1-10, 3, 5-8)" 
               class="w-full px-4 py-2.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm"
-            >
+          <!-- OCR Searchable Text Layer Option -->
+          <div class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-700/60 space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="scribd-enable-ocr" class="w-4 h-4 text-blue-600 rounded bg-slate-800 border-slate-700 focus:ring-blue-500 cursor-pointer">
+                <span class="text-xs sm:text-sm font-semibold text-slate-200">Nhận diện văn bản OCR (Có thể bôi đen copy & Ctrl + F)</span>
+              </label>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/20">MỚI</span>
+            </div>
+            <div id="scribd-ocr-options" class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 hidden">
+              <div class="space-y-1">
+                <label class="block text-[11px] text-slate-400 font-medium">Ngôn ngữ tài liệu:</label>
+                <select id="scribd-ocr-lang" class="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  <option value="vie+eng" selected>🇻🇳 & 🇬🇧 Song ngữ Tiếng Việt & Tiếng Anh</option>
+                  <option value="vie">🇻🇳 Chỉ Tiếng Việt</option>
+                  <option value="eng">🇬🇧 Chỉ Tiếng Anh</option>
+                </select>
+              </div>
+              <div class="text-[11px] text-slate-400 flex items-center">
+                <span>Tesseract AI sẽ quét ảnh và nhúng lớp văn bản ẩn khớp 100% tọa độ trang để bạn có thể copy hoặc tìm kiếm.</span>
+              </div>
+            </div>
           </div>
 
           <button 
@@ -677,6 +721,142 @@
     </div>
 
 
+    <!-- ==================== VIEW 6: QUICK PDF & MEDIA TOOLS ==================== -->
+    <div id="view-tools" class="space-y-6 hidden">
+      <div class="pt-2">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-2">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+          </svg>
+          Tiện Ích Xử Lý Tệp Nhanh
+        </div>
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white">Bộ Công Cụ Tệp</h2>
+        <p class="text-sm text-slate-400 mt-1">
+          Nén dung lượng file PDF, ghép nhiều file PDF thành một, hoặc tách trích xuất âm thanh MP3 từ video.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Tool 1: Compress PDF -->
+        <div class="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+              </svg>
+            </div>
+            <h3 class="text-base font-bold text-slate-100">Nén Dung Lượng PDF</h3>
+            <p class="text-xs text-slate-400">Tối ưu hoá luồng stream & giảm kích thước tệp PDF mà vẫn giữ nguyên độ nét trang.</p>
+            
+            <div class="space-y-1.5 pt-2">
+              <label class="block text-xs font-semibold text-slate-300">Chọn tệp PDF cần nén:</label>
+              <select id="tool-compress-select" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 focus:ring-1 focus:ring-blue-500">
+                <option value="">-- Chọn tệp PDF từ thư viện --</option>
+              </select>
+            </div>
+
+            <div id="tool-compress-result" class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-2 hidden">
+              <div class="text-emerald-400 font-semibold flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Đã nén thành công! (Giảm <span id="tool-compress-saved-pct">--</span>%)
+              </div>
+              <p class="text-slate-400 text-[11px]"><span id="tool-compress-orig">--</span> MB &rarr; <b class="text-white"><span id="tool-compress-new">--</span> MB</b></p>
+              <a id="tool-compress-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs">
+                Tải File Đã Nén
+              </a>
+            </div>
+          </div>
+
+          <button id="btn-run-compress" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-blue-600 hover:bg-blue-500 transition-all cursor-pointer flex items-center justify-center gap-1.5">
+            <span>Bắt Đầu Nén PDF</span>
+          </button>
+        </div>
+
+        <!-- Tool 2: Merge PDFs -->
+        <div class="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+            </div>
+            <h3 class="text-base font-bold text-slate-100">Ghép Nhiều Tệp PDF</h3>
+            <p class="text-xs text-slate-400">Chọn 2 hoặc nhiều tài liệu PDF để ghép thành một tệp duy nhất theo thứ tự.</p>
+            
+            <div class="space-y-1.5 pt-2">
+              <label class="block text-xs font-semibold text-slate-300">Chọn các tệp PDF (Ít nhất 2):</label>
+              <div id="tool-merge-list" class="max-h-32 overflow-y-auto space-y-1.5 p-2 bg-slate-900 rounded-xl border border-slate-700 text-xs text-slate-300">
+                <span class="text-slate-500 text-[11px]">Chưa có tệp PDF nào trong thư viện.</span>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <label class="block text-[11px] text-slate-400">Tên tệp sau khi ghép (Tùy chọn):</label>
+              <input id="tool-merge-filename" type="text" placeholder="tai_lieu_tong_hop.pdf" class="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200">
+            </div>
+
+            <div id="tool-merge-result" class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-2 hidden">
+              <div class="text-emerald-400 font-semibold flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Ghép thành công! (<span id="tool-merge-pages">--</span> trang)
+              </div>
+              <a id="tool-merge-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs">
+                Tải File Ghép
+              </a>
+            </div>
+          </div>
+
+          <button id="btn-run-merge" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-purple-600 hover:bg-purple-500 transition-all cursor-pointer flex items-center justify-center gap-1.5">
+            <span>Ghép Các Tệp Này</span>
+          </button>
+        </div>
+
+        <!-- Tool 3: Extract Audio from Video -->
+        <div class="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+              </svg>
+            </div>
+            <h3 class="text-base font-bold text-slate-100">Tách Nhạc MP3 từ Video</h3>
+            <p class="text-xs text-slate-400">Trích xuất âm thanh chất lượng cao 320 kbps từ bất kỳ video nào trong thư viện.</p>
+            
+            <div class="space-y-1.5 pt-2">
+              <label class="block text-xs font-semibold text-slate-300">Chọn tệp video:</label>
+              <select id="tool-audio-select" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 focus:ring-1 focus:ring-amber-500">
+                <option value="">-- Chọn video từ thư viện --</option>
+              </select>
+            </div>
+
+            <div class="space-y-1">
+              <label class="block text-[11px] text-slate-400">Chất lượng âm thanh:</label>
+              <select id="tool-audio-bitrate" class="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200">
+                <option value="320k" selected>MP3 - 320 kbps (Cao cấp nhất)</option>
+                <option value="192k">MP3 - 192 kbps (Tiêu chuẩn)</option>
+                <option value="128k">MP3 - 128 kbps (Nhẹ)</option>
+              </select>
+            </div>
+
+            <div id="tool-audio-result" class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-2 hidden">
+              <div class="text-emerald-400 font-semibold flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                Đã tách nhạc MP3 thành công!
+              </div>
+              <a id="tool-audio-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs">
+                Tải Nhạc MP3
+              </a>
+            </div>
+          </div>
+
+          <button id="btn-run-audio" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-slate-950 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 transition-all cursor-pointer flex items-center justify-center gap-1.5 font-bold">
+            <span>Trích Xuất Nhạc MP3</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+
     <!-- ==================== UNIFIED PROGRESS SECTION ==================== -->
     <div id="progress-section" class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 hidden">
       
@@ -995,6 +1175,61 @@
           <span class="w-5 h-5 rounded-full bg-slate-800 text-amber-400 font-bold flex items-center justify-center flex-shrink-0 text-[10px]">3</span>
           <span>Media & Doc Hub sẽ tự động mở tab, nhận diện URL và điền sẵn để bạn tải ngay!</span>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telegram Bot Settings Modal -->
+  <div id="telegram-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-6 sm:p-7 space-y-5">
+      <div class="flex items-start justify-between gap-3">
+        <div class="space-y-1">
+          <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
+            <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/>
+            </svg>
+            Tích Hợp Telegram
+          </div>
+          <h3 class="text-xl font-bold text-white">Cấu Hình Telegram Bot</h3>
+        </div>
+        <button id="telegram-close-btn" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div class="space-y-1.5">
+          <label class="block font-semibold text-slate-200">Bot Token:</label>
+          <input type="text" id="tg-token-input" placeholder="123456789:ABCdefGhIJKlmNoPQRstuVWXyz" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 font-mono focus:ring-1 focus:ring-sky-500">
+          <p class="text-[11px] text-slate-500">Lấy từ @BotFather trên Telegram khi tạo bot.</p>
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block font-semibold text-slate-200">Chat ID (Người nhận):</label>
+          <input type="text" id="tg-chatid-input" placeholder="Ví dụ: 123456789 hoặc -100123456789" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 placeholder-slate-500 font-mono focus:ring-1 focus:ring-sky-500">
+          <p class="text-[11px] text-slate-500">ID tài khoản cá nhân hoặc Group Telegram của bạn (Lấy qua @userinfobot).</p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+          <label class="flex items-center gap-2.5 cursor-pointer">
+            <input type="checkbox" id="tg-autosend-toggle" class="w-4 h-4 text-sky-600 rounded bg-slate-800 border-slate-700 focus:ring-sky-500 cursor-pointer">
+            <span class="font-semibold text-slate-200">Tự động gửi file về Telegram ngay sau khi tải xong</span>
+          </label>
+        </div>
+
+        <div id="tg-status-msg" class="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700 text-[11px] text-slate-300 hidden"></div>
+      </div>
+
+      <div class="flex items-center justify-between gap-3 pt-2">
+        <button id="btn-test-telegram" type="button" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-500/30 transition-all cursor-pointer">
+          Thử Nghiệm Gửi Tin
+        </button>
+
+        <button id="btn-save-telegram" type="button" class="px-5 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-600/20 transition-all cursor-pointer">
+          Lưu Cấu Hình
+        </button>
       </div>
     </div>
   </div>

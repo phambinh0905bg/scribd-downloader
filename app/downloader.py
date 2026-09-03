@@ -39,6 +39,9 @@ class DownloadTask:
         self.target_pages: List[int] = []
         self.percentage: int = 0
         
+        self.enable_ocr: bool = False
+        self.ocr_lang: str = "vie+eng"
+        
         self.pdf_path: Optional[Path] = None
         self.pdf_size_bytes: int = 0
         self.pdf_size_mb: float = 0.0
@@ -176,8 +179,10 @@ class ScribdDownloaderService:
         result = sorted(list(selected))
         return result if result else list(range(1, total_pages + 1))
 
-    def create_task(self, task_id: str, url: str, pages_range: str = "all") -> DownloadTask:
+    def create_task(self, task_id: str, url: str, pages_range: str = "all", enable_ocr: bool = False, ocr_lang: str = "vie+eng") -> DownloadTask:
         task = DownloadTask(task_id, url, pages_range)
+        task.enable_ocr = enable_ocr
+        task.ocr_lang = ocr_lang
         self.tasks[task_id] = task
         return task
 
@@ -511,8 +516,30 @@ class ScribdDownloaderService:
                         output_pdf = task.task_dir / task.clean_filename
                         pdf_created = False
                         
-                        # Try high-speed direct stream merge with img2pdf
-                        if img2pdf is not None:
+                        # Check if OCR is requested
+                        if task.enable_ocr:
+                            task.update_progress("compiling", f"Đang nhận diện chữ OCR ({task.ocr_lang}) cho {total_imgs} trang...", 88)
+                            task.add_log(f"🔤 Bắt đầu tiến trình nhận diện văn bản OCR (ngôn ngữ: {task.ocr_lang})...")
+                            try:
+                                from app.ocr import convert_images_to_searchable_pdf
+                                def ocr_cb(done, tot):
+                                    pct = 88 + int((done / tot) * 9)
+                                    task.update_progress("compiling", f"Đang OCR trang {done}/{tot}...", pct)
+                                
+                                ocr_success = await convert_images_to_searchable_pdf(
+                                    captured_images,
+                                    output_pdf,
+                                    lang=task.ocr_lang,
+                                    progress_callback=ocr_cb
+                                )
+                                if ocr_success:
+                                    pdf_created = True
+                                    task.add_log("✅ Đã tạo thành công file PDF có thể bôi đen copy chữ và tìm kiếm (OCR)!")
+                            except Exception as ocr_err:
+                                task.add_log(f"Cảnh báo OCR ({ocr_err}), chuyển sang chế độ đóng gói ảnh thông thường...", level="warning")
+
+                        # Try high-speed direct stream merge with img2pdf if OCR not used or failed
+                        if not pdf_created and img2pdf is not None:
                             try:
                                 task.add_log(f"Đang phân tích và tối ưu hóa {total_imgs} tệp ảnh...")
                                 task.update_progress("compiling", f"Đang ghép trực tiếp {total_imgs} luồng ảnh vào PDF...", 92)
@@ -536,30 +563,20 @@ class ScribdDownloaderService:
                             # Batch progress simulation for UI feedback
                             batch_size = max(5, total_imgs // 10)
                             for b_idx in range(0, total_imgs, batch_size):
-                                curr_batch = min(b_idx + batch_size, total_imgs)
-                                pct = 90 + int((curr_batch / total_imgs) * 8)
-                                task.update_progress("compiling", f"Đang nén & ghép trang {curr_batch}/{total_imgs}...", pct)
-                                task.add_log(f"  ↳ Đã tối ưu định dạng trang {curr_batch}/{total_imgs}...")
+                                b_end = min(b_idx + batch_size, total_imgs)
+                                pct = 90 + int((b_end / total_imgs) * 8)
+                                task.update_progress("compiling", f"Đang tối ưu & ghép trang {b_end}/{total_imgs}...", pct)
                                 await asyncio.sleep(0.05)
                             
-                            def convert_pillow():
-                                pil_images = [Image.open(img_path).convert("RGB") for img_path in captured_images]
-                                if pil_images:
-                                    pil_images[0].save(output_pdf, save_all=True, append_images=pil_images[1:], resolution=150.0)
-                            
-                            task.add_log("Đang nén và xuất file PDF hoàn chỉnh...")
-                            await asyncio.to_thread(convert_pillow)
-                            task.add_log("✅ Đã hoàn tất xuất file PDF qua Pillow.")
+                            # Real Pillow compile in worker thread
+                            await asyncio.to_thread(self._compile_pdf_thread, captured_images, output_pdf)
+                            task.add_log("✅ Đã tạo file PDF thành công qua Pillow.")
+                            pdf_created = True
                         
-                        if not output_pdf.exists() or output_pdf.stat().st_size == 0:
-                            task.error_message = "Lỗi khi tạo file PDF cuối cùng."
-                            task.add_log(f"Lỗi: {task.error_message}", level="error")
-                            task.update_progress("failed", task.error_message, 0)
-                            return
-                        
-                        # Clean up temp image files
+                        # Step 6: Cleanup Temp Images and Finalize
+                        task.update_progress("compiling", "Đang dọn dẹp bộ nhớ đệm và tối ưu file...", 98)
                         task.add_log("Đang dọn dẹp các tệp ảnh tạm thời để giải phóng dung lượng...")
-                        shutil.rmtree(task.temp_img_dir, ignore_errors=True)
+                        self.cleanup_temp_images(task.temp_img_dir)
                         
                         task.pdf_path = output_pdf
                         task.pdf_size_bytes = output_pdf.stat().st_size
@@ -568,6 +585,19 @@ class ScribdDownloaderService:
                         task.add_log(f"🎉 Xuất file PDF thành công: {task.clean_filename} (Dung lượng: {task.pdf_size_mb} MB).")
                         task.add_log(f"⏰ File sẽ tự động lưu trữ và xóa sau {settings.CLEANUP_MINUTES} phút.")
                         task.update_progress("completed", f"Hoàn tất! File PDF ({task.pdf_size_mb} MB) đã sẵn sàng tải xuống.", 100)
+
+                        # Auto-send to Telegram if enabled
+                        try:
+                            from app.telegram_bot import get_telegram_config, send_telegram_file
+                            cfg = get_telegram_config()
+                            if cfg.get("auto_send_enabled") and cfg.get("bot_token") and cfg.get("chat_id"):
+                                task.add_log("📲 Đang tự động gửi tệp về Telegram...")
+                                asyncio.create_task(send_telegram_file(
+                                    output_pdf,
+                                    caption=f"📚 {task.title}\n📄 {total_imgs} trang\n💾 {task.pdf_size_mb} MB"
+                                ))
+                        except Exception as tg_err:
+                            logger.warning(f"Lỗi gửi Telegram tự động: {tg_err}")
 
                         
                     except Exception as e:

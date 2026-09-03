@@ -11,18 +11,21 @@ const tabYouTube = document.getElementById("tab-youtube");
 const tabFacebook = document.getElementById("tab-facebook");
 const tabDirect = document.getElementById("tab-direct");
 const tabFiles = document.getElementById("tab-files");
+const tabTools = document.getElementById("tab-tools");
 
 const tabScribdM = document.getElementById("tab-scribd-m");
 const tabYouTubeM = document.getElementById("tab-youtube-m");
 const tabFacebookM = document.getElementById("tab-facebook-m");
 const tabDirectM = document.getElementById("tab-direct-m");
 const tabFilesM = document.getElementById("tab-files-m");
+const tabToolsM = document.getElementById("tab-tools-m");
 
 const viewScribd = document.getElementById("view-scribd");
 const viewYouTube = document.getElementById("view-youtube");
 const viewFacebook = document.getElementById("view-facebook");
 const viewDirect = document.getElementById("view-direct");
 const viewFiles = document.getElementById("view-files");
+const viewTools = document.getElementById("view-tools");
 const filesBadge = document.getElementById("files-badge");
 
 // Sections
@@ -111,7 +114,7 @@ function switchTab(tab) {
   errorSection.classList.add("hidden");
 
   // Reset tab button styles (Desktop & Mobile)
-  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM].forEach(btn => {
+  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -124,6 +127,7 @@ function switchTab(tab) {
   if (viewFacebook) viewFacebook.classList.add("hidden");
   if (viewDirect) viewDirect.classList.add("hidden");
   if (viewFiles) viewFiles.classList.add("hidden");
+  if (viewTools) viewTools.classList.add("hidden");
 
   if (tab === "scribd") {
     if (tabScribd) { tabScribd.classList.add("active"); tabScribd.classList.remove("text-slate-400"); }
@@ -154,6 +158,11 @@ function switchTab(tab) {
     if (tabFilesM) { tabFilesM.classList.add("active"); tabFilesM.classList.remove("text-slate-400"); }
     if (viewFiles) viewFiles.classList.remove("hidden");
     loadFilesList();
+  } else if (tab === "tools") {
+    if (tabTools) { tabTools.classList.add("active"); tabTools.classList.remove("text-slate-400"); }
+    if (tabToolsM) { tabToolsM.classList.add("active"); tabToolsM.classList.remove("text-slate-400"); }
+    if (viewTools) viewTools.classList.remove("hidden");
+    populateToolsLists();
   }
 }
 
@@ -162,12 +171,14 @@ if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"))
 if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
 if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
 if (tabFiles) tabFiles.addEventListener("click", () => switchTab("files"));
+if (tabTools) tabTools.addEventListener("click", () => switchTab("tools"));
 
 if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTubeM) tabYouTubeM.addEventListener("click", () => switchTab("youtube"));
 if (tabFacebookM) tabFacebookM.addEventListener("click", () => switchTab("facebook"));
 if (tabDirectM) tabDirectM.addEventListener("click", () => switchTab("direct"));
 if (tabFilesM) tabFilesM.addEventListener("click", () => switchTab("files"));
+if (tabToolsM) tabToolsM.addEventListener("click", () => switchTab("tools"));
 
 
 // ==================== CLIPBOARD PASTE HELPERS ====================
@@ -393,12 +404,29 @@ async function fetchDirectPreview(url) {
 
 // ==================== FORM SUBMISSION ====================
 
+// OCR Checkbox Toggle
+const scribdEnableOcr = document.getElementById("scribd-enable-ocr");
+const scribdOcrOptions = document.getElementById("scribd-ocr-options");
+const scribdOcrLang = document.getElementById("scribd-ocr-lang");
+
+if (scribdEnableOcr && scribdOcrOptions) {
+  scribdEnableOcr.addEventListener("change", () => {
+    if (scribdEnableOcr.checked) {
+      scribdOcrOptions.classList.remove("hidden");
+    } else {
+      scribdOcrOptions.classList.add("hidden");
+    }
+  });
+}
+
 // Scribd Submit
 if (scribdForm) {
   scribdForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const url = scribdUrlInput.value.trim();
     const pages = scribdPagesInput.value.trim() || "all";
+    const enableOcr = scribdEnableOcr ? scribdEnableOcr.checked : false;
+    const ocrLang = scribdOcrLang ? scribdOcrLang.value : "vie+eng";
 
     if (!url) {
       alert("Vui lòng nhập đường dẫn tài liệu Scribd!");
@@ -413,7 +441,12 @@ if (scribdForm) {
       const response = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, pages })
+        body: JSON.stringify({ 
+          url, 
+          pages,
+          enable_ocr: enableOcr,
+          ocr_lang: ocrLang
+        })
       });
 
       const data = await response.json();
@@ -1122,6 +1155,18 @@ function renderFilesList() {
             </svg>
           </button>
 
+          <!-- Send to Telegram Button -->
+          <button 
+            type="button" 
+            class="btn-file-telegram p-1.5 rounded-lg text-xs font-semibold text-sky-400 bg-sky-950/40 hover:bg-sky-900/60 border border-sky-800/40 transition-all cursor-pointer"
+            data-task-id="${f.task_id}"
+            title="Gửi tệp này về Telegram"
+          >
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/>
+            </svg>
+          </button>
+
           <!-- Download Button -->
           <a 
             href="${f.download_url}" 
@@ -1218,6 +1263,31 @@ function renderFilesList() {
         }
       } catch (err) {
         console.error("Lỗi xóa tệp:", err);
+      }
+    });
+  });
+  document.querySelectorAll(".btn-file-telegram").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tid = btn.getAttribute("data-task-id");
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = `<svg class="w-4 h-4 animate-spin text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>`;
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/telegram/send/${tid}`, { method: "POST" });
+        const data = await res.json();
+        if (res.ok) {
+          btn.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+          setTimeout(() => { btn.innerHTML = origHtml; btn.disabled = false; }, 2500);
+        } else {
+          alert("Lỗi gửi Telegram: " + (data.detail || "Chưa cấu hình Telegram Bot. Vui lòng bấm nút 'Telegram' ở góc trên để cài đặt!"));
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }
+      } catch (err) {
+        alert("Lỗi kết nối máy chủ khi gửi Telegram.");
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
       }
     });
   });
@@ -1345,6 +1415,306 @@ if (bookmarkletModal) {
 }
 
 
+// ==================== TELEGRAM BOT INTEGRATION ====================
+
+const telegramModal = document.getElementById("telegram-modal");
+const btnOpenTelegram = document.getElementById("btn-open-telegram");
+const telegramCloseBtn = document.getElementById("telegram-close-btn");
+const tgTokenInput = document.getElementById("tg-token-input");
+const tgChatIdInput = document.getElementById("tg-chatid-input");
+const tgAutoSendToggle = document.getElementById("tg-autosend-toggle");
+const btnTestTelegram = document.getElementById("btn-test-telegram");
+const btnSaveTelegram = document.getElementById("btn-save-telegram");
+const tgStatusMsg = document.getElementById("tg-status-msg");
+
+async function loadTelegramConfig() {
+  try {
+    const res = await fetch("/api/telegram/config");
+    const data = await res.json();
+    if (data.status === "success") {
+      if (tgTokenInput) tgTokenInput.value = data.bot_token || "";
+      if (tgChatIdInput) tgChatIdInput.value = data.chat_id || "";
+      if (tgAutoSendToggle) tgAutoSendToggle.checked = Boolean(data.auto_send_enabled);
+    }
+  } catch (err) {
+    console.error("Lỗi đọc cấu hình Telegram:", err);
+  }
+}
+
+if (btnOpenTelegram) {
+  btnOpenTelegram.addEventListener("click", () => {
+    loadTelegramConfig();
+    if (tgStatusMsg) tgStatusMsg.classList.add("hidden");
+    if (telegramModal) telegramModal.classList.remove("hidden");
+  });
+}
+
+if (telegramCloseBtn) {
+  telegramCloseBtn.addEventListener("click", () => {
+    if (telegramModal) telegramModal.classList.add("hidden");
+  });
+}
+
+if (telegramModal) {
+  telegramModal.addEventListener("click", (e) => {
+    if (e.target === telegramModal) telegramModal.classList.add("hidden");
+  });
+}
+
+if (btnTestTelegram) {
+  btnTestTelegram.addEventListener("click", async () => {
+    btnTestTelegram.innerText = "Đang gửi test...";
+    btnTestTelegram.disabled = true;
+
+    try {
+      const res = await fetch("/api/telegram/test", { method: "POST" });
+      const data = await res.json();
+      if (tgStatusMsg) {
+        tgStatusMsg.classList.remove("hidden");
+        if (res.ok) {
+          tgStatusMsg.innerHTML = `<span class="text-emerald-400 font-semibold">✅ ${data.message}</span>`;
+        } else {
+          tgStatusMsg.innerHTML = `<span class="text-rose-400 font-semibold">❌ Lỗi: ${data.detail || "Không thể kết nối Telegram"}</span>`;
+        }
+      }
+    } catch (err) {
+      if (tgStatusMsg) {
+        tgStatusMsg.classList.remove("hidden");
+        tgStatusMsg.innerHTML = `<span class="text-rose-400 font-semibold">❌ Lỗi kết nối tới máy chủ</span>`;
+      }
+    } finally {
+      btnTestTelegram.innerText = "Thử Nghiệm Gửi Tin";
+      btnTestTelegram.disabled = false;
+    }
+  });
+}
+
+if (btnSaveTelegram) {
+  btnSaveTelegram.addEventListener("click", async () => {
+    const bot_token = tgTokenInput.value.trim();
+    const chat_id = tgChatIdInput.value.trim();
+    const auto_send_enabled = tgAutoSendToggle.checked;
+
+    btnSaveTelegram.innerText = "Đang lưu...";
+    btnSaveTelegram.disabled = true;
+
+    try {
+      const res = await fetch("/api/telegram/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_token, chat_id, auto_send_enabled })
+      });
+      const data = await res.json();
+      if (tgStatusMsg) {
+        tgStatusMsg.classList.remove("hidden");
+        if (res.ok) {
+          tgStatusMsg.innerHTML = `<span class="text-emerald-400 font-semibold">✅ ${data.message}</span>`;
+          setTimeout(() => {
+            if (telegramModal) telegramModal.classList.add("hidden");
+          }, 1500);
+        } else {
+          tgStatusMsg.innerHTML = `<span class="text-rose-400 font-semibold">❌ ${data.detail || "Lỗi lưu cấu hình"}</span>`;
+        }
+      }
+    } catch (err) {
+      if (tgStatusMsg) {
+        tgStatusMsg.classList.remove("hidden");
+        tgStatusMsg.innerHTML = `<span class="text-rose-400 font-semibold">❌ Lỗi kết nối mạng</span>`;
+      }
+    } finally {
+      btnSaveTelegram.innerText = "Lưu Cấu Hình";
+      btnSaveTelegram.disabled = false;
+    }
+  });
+}
+
+
+// ==================== QUICK PDF & MEDIA TOOLS LOGIC ====================
+
+const toolCompressSelect = document.getElementById("tool-compress-select");
+const btnRunCompress = document.getElementById("btn-run-compress");
+const toolCompressResult = document.getElementById("tool-compress-result");
+const toolCompressSavedPct = document.getElementById("tool-compress-saved-pct");
+const toolCompressOrig = document.getElementById("tool-compress-orig");
+const toolCompressNew = document.getElementById("tool-compress-new");
+const toolCompressDownloadBtn = document.getElementById("tool-compress-download-btn");
+
+const toolMergeList = document.getElementById("tool-merge-list");
+const toolMergeFilename = document.getElementById("tool-merge-filename");
+const btnRunMerge = document.getElementById("btn-run-merge");
+const toolMergeResult = document.getElementById("tool-merge-result");
+const toolMergePages = document.getElementById("tool-merge-pages");
+const toolMergeDownloadBtn = document.getElementById("tool-merge-download-btn");
+
+const toolAudioSelect = document.getElementById("tool-audio-select");
+const toolAudioBitrate = document.getElementById("tool-audio-bitrate");
+const btnRunAudio = document.getElementById("btn-run-audio");
+const toolAudioResult = document.getElementById("tool-audio-result");
+const toolAudioDownloadBtn = document.getElementById("tool-audio-download-btn");
+
+function populateToolsLists() {
+  const pdfs = allFiles.filter(f => f.file_type === "pdf");
+  const videos = allFiles.filter(f => f.file_type === "video");
+
+  // Populate Compress Select
+  if (toolCompressSelect) {
+    if (pdfs.length === 0) {
+      toolCompressSelect.innerHTML = `<option value="">-- Chưa có tệp PDF nào trong thư viện --</option>`;
+    } else {
+      toolCompressSelect.innerHTML = `<option value="">-- Chọn tệp PDF cần nén (${pdfs.length} tệp) --</option>` +
+        pdfs.map(p => `<option value="${p.task_id}">${escapeHtml(p.filename)} (${p.size_mb} MB)</option>`).join("");
+    }
+  }
+
+  // Populate Merge Checkbox List
+  if (toolMergeList) {
+    if (pdfs.length === 0) {
+      toolMergeList.innerHTML = `<span class="text-slate-500 text-[11px]">Chưa có tệp PDF nào trong thư viện.</span>`;
+    } else {
+      toolMergeList.innerHTML = pdfs.map(p => `
+        <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-800/80 cursor-pointer">
+          <input type="checkbox" name="merge-pdf-item" value="${p.task_id}" class="w-3.5 h-3.5 text-purple-600 rounded bg-slate-950 border-slate-700">
+          <span class="truncate flex-1 font-mono text-[11px] text-slate-200">${escapeHtml(p.filename)}</span>
+          <span class="text-[10px] text-slate-400 font-mono flex-shrink-0">${p.size_mb} MB</span>
+        </label>
+      `).join("");
+    }
+  }
+
+  // Populate Audio Select
+  if (toolAudioSelect) {
+    if (videos.length === 0) {
+      toolAudioSelect.innerHTML = `<option value="">-- Chưa có tệp video nào trong thư viện --</option>`;
+    } else {
+      toolAudioSelect.innerHTML = `<option value="">-- Chọn tệp video (${videos.length} video) --</option>` +
+        videos.map(v => `<option value="${v.task_id}">${escapeHtml(v.filename)} (${v.size_mb} MB)</option>`).join("");
+    }
+  }
+}
+
+// Compress PDF Action
+if (btnRunCompress) {
+  btnRunCompress.addEventListener("click", async () => {
+    const tid = toolCompressSelect?.value;
+    if (!tid) {
+      alert("Vui lòng chọn 1 tệp PDF cần nén!");
+      return;
+    }
+
+    btnRunCompress.innerText = "Đang nén dữ liệu qua Pikepdf...";
+    btnRunCompress.disabled = true;
+
+    try {
+      const res = await fetch("/api/tools/compress-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: tid })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        if (toolCompressSavedPct) toolCompressSavedPct.innerText = data.percentage_saved;
+        if (toolCompressOrig) toolCompressOrig.innerText = data.original_size_mb;
+        if (toolCompressNew) toolCompressNew.innerText = data.compressed_size_mb;
+        if (toolCompressDownloadBtn) {
+          toolCompressDownloadBtn.href = data.download_url;
+          toolCompressDownloadBtn.setAttribute("download", data.filename);
+        }
+        if (toolCompressResult) toolCompressResult.classList.remove("hidden");
+        loadFilesList();
+      } else {
+        alert("Lỗi nén PDF: " + (data.detail || "Không thể nén tệp"));
+      }
+    } catch (err) {
+      alert("Lỗi kết nối máy chủ khi nén PDF.");
+    } finally {
+      btnRunCompress.innerText = "Bắt Đầu Nén PDF";
+      btnRunCompress.disabled = false;
+    }
+  });
+}
+
+// Merge PDFs Action
+if (btnRunMerge) {
+  btnRunMerge.addEventListener("click", async () => {
+    const selected = Array.from(document.querySelectorAll("input[name='merge-pdf-item']:checked")).map(cb => cb.value);
+    if (selected.length < 2) {
+      alert("Vui lòng tích chọn ít nhất 2 tệp PDF để ghép!");
+      return;
+    }
+
+    const output_filename = toolMergeFilename?.value.trim() || "tai_lieu_tong_hop.pdf";
+
+    btnRunMerge.innerText = `Đang ghép ${selected.length} tệp PDF...`;
+    btnRunMerge.disabled = true;
+
+    try {
+      const res = await fetch("/api/tools/merge-pdfs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_ids: selected, output_filename })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        if (toolMergePages) toolMergePages.innerText = data.total_pages;
+        if (toolMergeDownloadBtn) {
+          toolMergeDownloadBtn.href = data.download_url;
+          toolMergeDownloadBtn.setAttribute("download", data.filename);
+        }
+        if (toolMergeResult) toolMergeResult.classList.remove("hidden");
+        loadFilesList();
+      } else {
+        alert("Lỗi ghép PDF: " + (data.detail || "Không thể ghép tệp"));
+      }
+    } catch (err) {
+      alert("Lỗi kết nối máy chủ khi ghép PDF.");
+    } finally {
+      btnRunMerge.innerText = "Ghép Các Tệp Này";
+      btnRunMerge.disabled = false;
+    }
+  });
+}
+
+// Extract Audio Action
+if (btnRunAudio) {
+  btnRunAudio.addEventListener("click", async () => {
+    const tid = toolAudioSelect?.value;
+    if (!tid) {
+      alert("Vui lòng chọn 1 video để tách nhạc!");
+      return;
+    }
+
+    const bitrate = toolAudioBitrate?.value || "320k";
+
+    btnRunAudio.innerText = "FFmpeg đang tách audio MP3...";
+    btnRunAudio.disabled = true;
+
+    try {
+      const res = await fetch("/api/tools/extract-audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: tid, bitrate })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        if (toolAudioDownloadBtn) {
+          toolAudioDownloadBtn.href = data.download_url;
+          toolAudioDownloadBtn.setAttribute("download", data.filename);
+        }
+        if (toolAudioResult) toolAudioResult.classList.remove("hidden");
+        loadFilesList();
+      } else {
+        alert("Lỗi trích xuất audio: " + (data.detail || "Không thể tách âm thanh"));
+      }
+    } catch (err) {
+      alert("Lỗi kết nối máy chủ khi tách audio.");
+    } finally {
+      btnRunAudio.innerText = "Trích Xuất Nhạc MP3";
+      btnRunAudio.disabled = false;
+    }
+  });
+}
+
+
 // ==================== URL QUERY PARAMETER DISPATCHER ====================
 
 function handleUrlParamsOnLoad() {
@@ -1354,7 +1724,7 @@ function handleUrlParamsOnLoad() {
 
   const cleanUrl = decodeURIComponent(incomingUrl).trim();
 
-  if (cleanUrl.includes("scribd.com")) {
+  if (cleanUrl.includes("scribd.com") || cleanUrl.includes("slideshare.net")) {
     switchTab("scribd");
     if (scribdUrlInput) {
       scribdUrlInput.value = cleanUrl;
@@ -1366,7 +1736,7 @@ function handleUrlParamsOnLoad() {
       ytUrlInput.value = cleanUrl;
       ytUrlInput.dispatchEvent(new Event("input"));
     }
-  } else if (cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch")) {
+  } else if (cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch") || cleanUrl.includes("tiktok.com") || cleanUrl.includes("instagram.com")) {
     switchTab("facebook");
     if (fbUrlInput) {
       fbUrlInput.value = cleanUrl;
@@ -1392,4 +1762,5 @@ document.addEventListener("DOMContentLoaded", () => {
 initBookmarklet();
 handleUrlParamsOnLoad();
 loadFilesBadgeOnly();
+
 

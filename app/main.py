@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
@@ -61,6 +61,8 @@ templates = Jinja2Templates(directory=str(templates_dir))
 class ScribdDownloadRequest(BaseModel):
     url: str
     pages: Optional[str] = "all"
+    enable_ocr: Optional[bool] = False
+    ocr_lang: Optional[str] = "vie+eng"
 
 
 class YouTubeInfoRequest(BaseModel):
@@ -92,6 +94,26 @@ class DirectDownloadRequest(BaseModel):
     custom_filename: Optional[str] = None
 
 
+class TelegramConfigRequest(BaseModel):
+    bot_token: str
+    chat_id: str
+    auto_send_enabled: bool = False
+
+
+class CompressPdfRequest(BaseModel):
+    task_id: str
+
+
+class MergePdfsRequest(BaseModel):
+    task_ids: List[str]
+    output_filename: Optional[str] = None
+
+
+class ExtractAudioRequest(BaseModel):
+    task_id: str
+    bitrate: Optional[str] = "320k"
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request):
     return templates.TemplateResponse(
@@ -119,7 +141,13 @@ async def start_scribd_download(req: ScribdDownloadRequest):
         raise HTTPException(status_code=400, detail="URL không hợp lệ hoặc không tìm thấy ID tài liệu Scribd.")
     
     task_id = str(uuid.uuid4())[:8]
-    task = downloader_service.create_task(task_id, url, req.pages or "all")
+    task = downloader_service.create_task(
+        task_id, 
+        url, 
+        req.pages or "all", 
+        enable_ocr=bool(req.enable_ocr), 
+        ocr_lang=req.ocr_lang or "vie+eng"
+    )
     
     asyncio.create_task(downloader_service.run_download_task(task))
     
@@ -545,5 +573,167 @@ async def get_storage_info():
 async def trigger_manual_cleanup():
     res = cleanup_expired_and_abandoned_files(settings.CLEANUP_MINUTES, abandoned_max_minutes=1)
     return {"status": "success", "result": res}
+
+
+# --- TELEGRAM BOT ENDPOINTS ---
+
+@app.get("/api/telegram/config")
+async def get_telegram_bot_config():
+    from app.telegram_bot import get_telegram_config
+    cfg = get_telegram_config()
+    token = cfg.get("bot_token", "")
+    masked_token = f"{token[:8]}...{token[-5:]}" if len(token) > 13 else ("***" if token else "")
+    return {
+        "status": "success",
+        "bot_token": masked_token,
+        "is_configured": bool(token and cfg.get("chat_id")),
+        "chat_id": cfg.get("chat_id", ""),
+        "auto_send_enabled": cfg.get("auto_send_enabled", False)
+    }
+
+
+@app.post("/api/telegram/config")
+async def save_telegram_bot_config(req: TelegramConfigRequest):
+    from app.telegram_bot import save_telegram_config, get_telegram_config
+    token = req.bot_token.strip()
+    # If client passed masked token, keep previous token
+    if "..." in token:
+        old = get_telegram_config()
+        token = old.get("bot_token", "")
+        
+    cfg = save_telegram_config(token, req.chat_id, req.auto_send_enabled)
+    return {"status": "success", "message": "Đã lưu cấu hình Telegram thành công", "config": cfg}
+
+
+@app.post("/api/telegram/test")
+async def test_telegram_connection():
+    from app.telegram_bot import send_telegram_message
+    res = await send_telegram_message("🤖 <b>Media & Doc Hub</b>: Kết nối Telegram Bot thành công!")
+    if res.get("success"):
+        return {"status": "success", "message": "Gửi tin nhắn thử nghiệm thành công!"}
+    raise HTTPException(status_code=400, detail=res.get("error", "Không thể gửi tin nhắn thử nghiệm"))
+
+
+@app.post("/api/telegram/send/{task_id}")
+async def send_file_to_telegram(task_id: str):
+    from app.telegram_bot import send_telegram_file
+    task_dir = settings.DOWNLOADS_DIR / task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy thư mục tệp")
+        
+    files = [f for f in task_dir.iterdir() if f.is_file() and f.name not in [".gitkeep", ".pinned"] and not f.name.endswith(".part")]
+    if not files:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp để gửi")
+        
+    target_file = max(files, key=lambda f: f.stat().st_size)
+    size_mb = round(target_file.stat().st_size / (1024 * 1024), 2)
+    caption = f"📦 <b>{target_file.name}</b>\n💾 Dung lượng: {size_mb} MB"
+    
+    res = await send_telegram_file(target_file, caption=caption)
+    if res.get("success"):
+        return {"status": "success", "message": f"Đã gửi tệp {target_file.name} về Telegram thành công!"}
+    raise HTTPException(status_code=400, detail=res.get("error", "Lỗi gửi file lên Telegram"))
+
+
+# --- QUICK PDF & MEDIA TOOLS ENDPOINTS ---
+
+@app.post("/api/tools/compress-pdf")
+async def api_compress_pdf(req: CompressPdfRequest):
+    from app.tools import compress_pdf
+    task_dir = settings.DOWNLOADS_DIR / req.task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp")
+        
+    pdf_files = [f for f in task_dir.glob("*.pdf") if not f.name.startswith("compressed_")]
+    if not pdf_files:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp PDF để nén")
+        
+    src_pdf = pdf_files[0]
+    new_task_id = str(uuid.uuid4())[:8]
+    new_dir = settings.DOWNLOADS_DIR / new_task_id
+    new_dir.mkdir(parents=True, exist_ok=True)
+    
+    out_pdf = new_dir / f"compressed_{src_pdf.name}"
+    res = compress_pdf(src_pdf, out_pdf)
+    if res.get("success"):
+        return {
+            "status": "success",
+            "task_id": new_task_id,
+            "filename": out_pdf.name,
+            "download_url": f"/api/file/{new_task_id}",
+            "original_size_mb": res["original_size_mb"],
+            "compressed_size_mb": res["compressed_size_mb"],
+            "percentage_saved": res["percentage_saved"]
+        }
+    raise HTTPException(status_code=400, detail=res.get("error", "Lỗi nén PDF"))
+
+
+@app.post("/api/tools/merge-pdfs")
+async def api_merge_pdfs(req: MergePdfsRequest):
+    from app.tools import merge_pdfs
+    if len(req.task_ids) < 2:
+        raise HTTPException(status_code=400, detail="Cần chọn ít nhất 2 tệp PDF để ghép")
+        
+    src_pdfs = []
+    for tid in req.task_ids:
+        t_dir = settings.DOWNLOADS_DIR / tid
+        if t_dir.exists():
+            pdfs = [f for f in t_dir.glob("*.pdf")]
+            if pdfs:
+                src_pdfs.append(pdfs[0])
+                
+    if len(src_pdfs) < 2:
+        raise HTTPException(status_code=400, detail="Không tìm đủ 2 tệp PDF hợp lệ")
+        
+    new_task_id = str(uuid.uuid4())[:8]
+    new_dir = settings.DOWNLOADS_DIR / new_task_id
+    new_dir.mkdir(parents=True, exist_ok=True)
+    
+    out_name = req.output_filename.strip() if req.output_filename else f"merged_document_{new_task_id}.pdf"
+    if not out_name.endswith(".pdf"):
+        out_name += ".pdf"
+        
+    out_pdf = new_dir / out_name
+    res = merge_pdfs(src_pdfs, out_pdf)
+    if res.get("success"):
+        return {
+            "status": "success",
+            "task_id": new_task_id,
+            "filename": out_pdf.name,
+            "download_url": f"/api/file/{new_task_id}",
+            "total_files": res["total_files"],
+            "total_pages": res["total_pages"],
+            "size_mb": res["size_mb"]
+        }
+    raise HTTPException(status_code=400, detail=res.get("error", "Lỗi ghép PDF"))
+
+
+@app.post("/api/tools/extract-audio")
+async def api_extract_audio(req: ExtractAudioRequest):
+    from app.tools import extract_audio_from_video
+    task_dir = settings.DOWNLOADS_DIR / req.task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp video")
+        
+    video_files = [f for f in task_dir.iterdir() if f.suffix.lower() in [".mp4", ".mkv", ".webm", ".mov"]]
+    if not video_files:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp video trong tác vụ")
+        
+    src_video = video_files[0]
+    new_task_id = str(uuid.uuid4())[:8]
+    new_dir = settings.DOWNLOADS_DIR / new_task_id
+    new_dir.mkdir(parents=True, exist_ok=True)
+    
+    out_mp3 = new_dir / f"{src_video.stem}.mp3"
+    res = await extract_audio_from_video(src_video, out_mp3, bitrate=req.bitrate or "320k")
+    if res.get("success"):
+        return {
+            "status": "success",
+            "task_id": new_task_id,
+            "filename": out_mp3.name,
+            "download_url": f"/api/file/{new_task_id}",
+            "size_mb": res["size_mb"]
+        }
+    raise HTTPException(status_code=400, detail=res.get("error", "Lỗi tách âm thanh từ video"))
 
 
