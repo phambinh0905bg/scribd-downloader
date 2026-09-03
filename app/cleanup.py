@@ -168,6 +168,10 @@ def cleanup_expired_and_abandoned_files(
                 age_seconds = now - mtime
                 item_size = get_dir_size(item)
                 
+                # RULE 0: If item has a .pinned marker file, NEVER DELETE IT (Permanently Pinned by user)!
+                if item.is_dir() and (item / ".pinned").exists():
+                    continue
+
                 # RULE 1: If task is currently active in memory, NEVER touch it!
                 if is_task_actively_running(item.name):
                     continue

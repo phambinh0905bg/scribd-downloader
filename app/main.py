@@ -1,7 +1,9 @@
 import uuid
 import json
+import time
 import asyncio
 import logging
+from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -386,6 +388,146 @@ async def download_output_file(task_id: str):
                 media_type=content_type
             )
             
+@app.get("/api/files")
+async def list_downloaded_files():
+    """List all available completed files in downloads storage with metadata, preview links and pin status."""
+    downloads_dir = settings.DOWNLOADS_DIR
+    if not downloads_dir.exists():
+        return {"status": "success", "files": []}
+
+    now = time.time()
+    max_age_seconds = settings.CLEANUP_MINUTES * 60
+    results = []
+
+    try:
+        for item in downloads_dir.iterdir():
+            if not item.is_dir() or item.name in [".gitkeep", "temp"]:
+                continue
+            
+            task_id = item.name
+            is_pinned = (item / ".pinned").exists()
+            
+            # Find the primary completed output file
+            files = [
+                f for f in item.iterdir() 
+                if f.is_file() and f.name not in [".gitkeep", ".pinned"] and not f.name.endswith(".part") and not f.name.endswith(".ytdl")
+            ]
+            if not files:
+                continue
+                
+            main_file = max(files, key=lambda f: f.stat().st_size)
+            ext = main_file.suffix.lower()
+            size_bytes = main_file.stat().st_size
+            mtime = main_file.stat().st_mtime
+            age_seconds = now - mtime
+            remaining_seconds = max(0, int(max_age_seconds - age_seconds))
+            
+            # Determine type & mime
+            if ext == ".pdf":
+                file_type = "pdf"
+                content_type = "application/pdf"
+            elif ext in [".mp4", ".mkv", ".webm", ".mov", ".avi"]:
+                file_type = "video"
+                content_type = "video/mp4"
+            elif ext in [".mp3", ".m4a", ".wav", ".aac", ".ogg", ".flac"]:
+                file_type = "audio"
+                content_type = "audio/mpeg"
+            elif ext in [".zip", ".tar", ".gz", ".rar", ".7z"]:
+                file_type = "archive"
+                content_type = "application/zip"
+            elif ext in [".jpg", ".jpeg", ".png", ".webp"]:
+                file_type = "image"
+                content_type = "image/jpeg"
+            else:
+                file_type = "file"
+                content_type = "application/octet-stream"
+
+            results.append({
+                "task_id": task_id,
+                "filename": main_file.name,
+                "file_type": file_type,
+                "content_type": content_type,
+                "size_bytes": size_bytes,
+                "size_mb": round(size_bytes / (1024 * 1024), 2),
+                "created_at": datetime.fromtimestamp(mtime).strftime("%H:%M - %d/%m/%Y"),
+                "is_pinned": is_pinned,
+                "expires_in_minutes": int(remaining_seconds // 60),
+                "download_url": f"/api/file/{task_id}",
+                "preview_url": f"/api/files/preview/{task_id}"
+            })
+    except Exception as e:
+        logger.error(f"Lỗi khi đọc danh sách tệp: {e}")
+
+    # Sort newest first
+    results.sort(key=lambda x: x.get("expires_in_minutes", 0), reverse=True)
+    return {"status": "success", "files": results, "total_count": len(results)}
+
+
+@app.post("/api/files/pin/{task_id}")
+async def pin_file(task_id: str):
+    """Pin a file so that auto-cleanup will NEVER delete it."""
+    if not task_id or "/" in task_id or "\\" in task_id or ".." in task_id:
+        raise HTTPException(status_code=400, detail="Invalid task_id")
+    task_dir = settings.DOWNLOADS_DIR / task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy thư mục tệp")
+    
+    pin_file = task_dir / ".pinned"
+    pin_file.touch(exist_ok=True)
+    return {"status": "success", "task_id": task_id, "is_pinned": True}
+
+
+@app.post("/api/files/unpin/{task_id}")
+async def unpin_file(task_id: str):
+    """Unpin a file to restore normal 5-hour TTL cleanup."""
+    if not task_id or "/" in task_id or "\\" in task_id or ".." in task_id:
+        raise HTTPException(status_code=400, detail="Invalid task_id")
+    task_dir = settings.DOWNLOADS_DIR / task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy thư mục tệp")
+    
+    pin_file = task_dir / ".pinned"
+    if pin_file.exists():
+        pin_file.unlink(missing_ok=True)
+    return {"status": "success", "task_id": task_id, "is_pinned": False}
+
+
+@app.get("/api/files/preview/{task_id}")
+async def preview_output_file(task_id: str):
+    """Stream file with inline content-disposition for in-browser audio, video, and PDF preview."""
+    task_dir = settings.DOWNLOADS_DIR / task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp")
+
+    files = [
+        f for f in task_dir.iterdir() 
+        if f.is_file() and f.name not in [".gitkeep", ".pinned"] and not f.name.endswith(".part")
+    ]
+    if not files:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp đã tải")
+
+    target = max(files, key=lambda f: f.stat().st_size)
+    ext = target.suffix.lower()
+    
+    if ext == ".pdf":
+        content_type = "application/pdf"
+    elif ext in [".mp4", ".mkv", ".webm", ".mov"]:
+        content_type = "video/mp4"
+    elif ext in [".mp3", ".m4a", ".wav", ".aac"]:
+        content_type = "audio/mpeg"
+    elif ext in [".jpg", ".jpeg", ".png", ".webp"]:
+        content_type = "image/jpeg"
+    else:
+        content_type = "application/octet-stream"
+
+    return FileResponse(
+        path=str(target),
+        filename=target.name,
+        media_type=content_type,
+        content_disposition_type="inline"
+    )
+
+
 @app.delete("/api/task/{task_id}")
 @app.post("/api/task/{task_id}/delete")
 @app.post("/api/task/{task_id}/abort")
@@ -403,4 +545,5 @@ async def get_storage_info():
 async def trigger_manual_cleanup():
     res = cleanup_expired_and_abandoned_files(settings.CLEANUP_MINUTES, abandoned_max_minutes=1)
     return {"status": "success", "result": res}
+
 

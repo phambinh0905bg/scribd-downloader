@@ -10,16 +10,20 @@ const tabScribd = document.getElementById("tab-scribd");
 const tabYouTube = document.getElementById("tab-youtube");
 const tabFacebook = document.getElementById("tab-facebook");
 const tabDirect = document.getElementById("tab-direct");
+const tabFiles = document.getElementById("tab-files");
 
 const tabScribdM = document.getElementById("tab-scribd-m");
 const tabYouTubeM = document.getElementById("tab-youtube-m");
 const tabFacebookM = document.getElementById("tab-facebook-m");
 const tabDirectM = document.getElementById("tab-direct-m");
+const tabFilesM = document.getElementById("tab-files-m");
 
 const viewScribd = document.getElementById("view-scribd");
 const viewYouTube = document.getElementById("view-youtube");
 const viewFacebook = document.getElementById("view-facebook");
 const viewDirect = document.getElementById("view-direct");
+const viewFiles = document.getElementById("view-files");
+const filesBadge = document.getElementById("files-badge");
 
 // Sections
 const progressSection = document.getElementById("progress-section");
@@ -107,7 +111,7 @@ function switchTab(tab) {
   errorSection.classList.add("hidden");
 
   // Reset tab button styles (Desktop & Mobile)
-  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM].forEach(btn => {
+  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -119,6 +123,7 @@ function switchTab(tab) {
   viewYouTube.classList.add("hidden");
   if (viewFacebook) viewFacebook.classList.add("hidden");
   if (viewDirect) viewDirect.classList.add("hidden");
+  if (viewFiles) viewFiles.classList.add("hidden");
 
   if (tab === "scribd") {
     if (tabScribd) { tabScribd.classList.add("active"); tabScribd.classList.remove("text-slate-400"); }
@@ -144,6 +149,11 @@ function switchTab(tab) {
     if (viewDirect) viewDirect.classList.remove("hidden");
     step3Label.innerText = "Tải Stream Tệp";
     directUrlInput.focus();
+  } else if (tab === "files") {
+    if (tabFiles) { tabFiles.classList.add("active"); tabFiles.classList.remove("text-slate-400"); }
+    if (tabFilesM) { tabFilesM.classList.add("active"); tabFilesM.classList.remove("text-slate-400"); }
+    if (viewFiles) viewFiles.classList.remove("hidden");
+    loadFilesList();
   }
 }
 
@@ -151,11 +161,13 @@ if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
 if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
 if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
+if (tabFiles) tabFiles.addEventListener("click", () => switchTab("files"));
 
 if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTubeM) tabYouTubeM.addEventListener("click", () => switchTab("youtube"));
 if (tabFacebookM) tabFacebookM.addEventListener("click", () => switchTab("facebook"));
 if (tabDirectM) tabDirectM.addEventListener("click", () => switchTab("direct"));
+if (tabFilesM) tabFilesM.addEventListener("click", () => switchTab("files"));
 
 
 // ==================== CLIPBOARD PASTE HELPERS ====================
@@ -933,3 +945,451 @@ function startCountdown(seconds) {
   update();
   countdownTimerInterval = setInterval(update, 1000);
 }
+
+
+// ==================== MY FILES & HISTORY MANAGER ====================
+
+let allFiles = [];
+let activeFileFilter = "all";
+let fileSearchQuery = "";
+
+const filesListContainer = document.getElementById("files-list-container");
+const filesEmptyState = document.getElementById("files-empty-state");
+const btnRefreshFiles = document.getElementById("btn-refresh-files");
+const filesSearchInput = document.getElementById("files-search-input");
+const fileFilterBtns = document.querySelectorAll(".file-filter-btn");
+
+// Preview Modal Elements
+const previewModal = document.getElementById("preview-modal");
+const modalTypeBadge = document.getElementById("modal-type-badge");
+const modalFileTitle = document.getElementById("modal-file-title");
+const modalDownloadBtn = document.getElementById("modal-download-btn");
+const modalCloseBtn = document.getElementById("modal-close-btn");
+const modalIframe = document.getElementById("modal-iframe");
+const modalVideo = document.getElementById("modal-video");
+const modalAudioBox = document.getElementById("modal-audio-box");
+const modalAudio = document.getElementById("modal-audio");
+const modalUnsupported = document.getElementById("modal-unsupported");
+const modalUnsupportedDownload = document.getElementById("modal-unsupported-download");
+
+// Bookmarklet Modal Elements
+const bookmarkletModal = document.getElementById("bookmarklet-modal");
+const btnOpenBookmarklet = document.getElementById("btn-open-bookmarklet");
+const bookmarkletCloseBtn = document.getElementById("bookmarklet-close-btn");
+const bookmarkletDraggableLink = document.getElementById("bookmarklet-draggable-link");
+
+async function loadFilesList() {
+  if (btnRefreshFiles) {
+    const icon = btnRefreshFiles.querySelector("svg");
+    if (icon) icon.classList.add("animate-spin");
+  }
+
+  try {
+    const res = await fetch("/api/files");
+    const data = await res.json();
+    allFiles = data.files || [];
+    if (filesBadge) filesBadge.innerText = data.total_count || 0;
+    renderFilesList();
+  } catch (err) {
+    console.error("Lỗi tải danh sách tệp:", err);
+  } finally {
+    if (btnRefreshFiles) {
+      const icon = btnRefreshFiles.querySelector("svg");
+      if (icon) icon.classList.remove("animate-spin");
+    }
+  }
+}
+
+async function loadFilesBadgeOnly() {
+  try {
+    const res = await fetch("/api/files");
+    const data = await res.json();
+    if (filesBadge) filesBadge.innerText = data.total_count || 0;
+  } catch (_) {}
+}
+
+function renderFilesList() {
+  if (!filesListContainer) return;
+
+  // Filter by category
+  let filtered = allFiles.filter(f => {
+    if (activeFileFilter === "pdf") return f.file_type === "pdf";
+    if (activeFileFilter === "video") return f.file_type === "video";
+    if (activeFileFilter === "audio") return f.file_type === "audio";
+    if (activeFileFilter === "pinned") return f.is_pinned === true;
+    return true;
+  });
+
+  // Filter by search query
+  if (fileSearchQuery) {
+    const q = fileSearchQuery.toLowerCase();
+    filtered = filtered.filter(f => f.filename.toLowerCase().includes(q));
+  }
+
+  if (filtered.length === 0) {
+    filesListContainer.innerHTML = "";
+    if (filesEmptyState) filesEmptyState.classList.remove("hidden");
+    return;
+  }
+
+  if (filesEmptyState) filesEmptyState.classList.add("hidden");
+
+  filesListContainer.innerHTML = filtered.map(f => {
+    // Determine icon and colors
+    let typeColor = "purple";
+    let iconSvg = "";
+
+    if (f.file_type === "pdf") {
+      typeColor = "blue";
+      iconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>`;
+    } else if (f.file_type === "video") {
+      typeColor = "red";
+      iconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>`;
+    } else if (f.file_type === "audio") {
+      typeColor = "amber";
+      iconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>`;
+    } else {
+      typeColor = "emerald";
+      iconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>`;
+    }
+
+    const pinBadge = f.is_pinned
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+          <svg class="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"></path></svg>
+          Đã ghim vĩnh viễn
+        </span>`
+      : `<span class="inline-flex items-center gap-1 text-[11px] text-slate-400">
+          <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          Còn ${Math.floor(f.expires_in_minutes / 60)}h ${f.expires_in_minutes % 60}m
+        </span>`;
+
+    const pinButtonTitle = f.is_pinned ? "Bỏ ghim (khôi phục tự xóa sau 5h)" : "Ghim tệp này (không bao giờ tự xóa)";
+    const pinButtonClass = f.is_pinned 
+      ? "text-amber-400 bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20" 
+      : "text-slate-400 bg-slate-800 border-slate-700 hover:text-amber-400 hover:bg-slate-700";
+
+    return `
+      <div class="glass-panel rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:border-slate-700/90" data-task-id="${f.task_id}">
+        <!-- File Info -->
+        <div class="flex items-center gap-3.5 min-w-0 flex-1">
+          <div class="w-11 h-11 rounded-xl bg-${typeColor}-500/10 border border-${typeColor}-500/20 text-${typeColor}-400 flex items-center justify-center flex-shrink-0">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              ${iconSvg}
+            </svg>
+          </div>
+          <div class="min-w-0 flex-1 space-y-1">
+            <div class="flex items-center gap-2">
+              <h4 class="font-bold text-sm text-slate-200 truncate" title="${escapeHtml(f.filename)}">
+                ${escapeHtml(f.filename)}
+              </h4>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-slate-400 flex-wrap font-mono">
+              <span class="text-slate-300 font-semibold">${f.size_mb} MB</span>
+              <span>•</span>
+              <span class="text-slate-500">${f.created_at}</span>
+              <span>•</span>
+              ${pinBadge}
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-1.5 flex-shrink-0 self-end sm:self-center">
+          <!-- Preview Button -->
+          <button 
+            type="button" 
+            class="btn-file-preview px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600/80 hover:bg-indigo-600 text-white transition-all flex items-center gap-1 cursor-pointer"
+            data-task-id="${f.task_id}"
+            title="Xem trước trực tiếp"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+            </svg>
+            <span>Xem</span>
+          </button>
+
+          <!-- Pin Button -->
+          <button 
+            type="button" 
+            class="btn-file-pin p-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${pinButtonClass}"
+            data-task-id="${f.task_id}"
+            data-pinned="${f.is_pinned}"
+            title="${pinButtonTitle}"
+          >
+            <svg class="w-4 h-4" fill="${f.is_pinned ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"></path>
+            </svg>
+          </button>
+
+          <!-- Download Button -->
+          <a 
+            href="${f.download_url}" 
+            download="${escapeHtml(f.filename)}"
+            class="p-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:text-white hover:bg-slate-700 border border-slate-700 transition-all flex items-center justify-center cursor-pointer"
+            title="Tải về máy"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+            </svg>
+          </a>
+
+          <!-- Copy Link Button -->
+          <button 
+            type="button" 
+            class="btn-file-copy p-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800 hover:text-white hover:bg-slate-700 border border-slate-700 transition-all cursor-pointer"
+            data-url="${window.location.origin}${f.download_url}"
+            title="Sao chép liên kết tải"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+            </svg>
+          </button>
+
+          <!-- Delete Button -->
+          <button 
+            type="button" 
+            class="btn-file-delete p-1.5 rounded-lg text-xs font-semibold text-rose-400 bg-rose-950/30 hover:bg-rose-900/50 border border-rose-900/40 transition-all cursor-pointer"
+            data-task-id="${f.task_id}"
+            title="Xóa tệp khỏi máy chủ"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // Attach Event Listeners to rendered elements
+  document.querySelectorAll(".btn-file-preview").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tid = btn.getAttribute("data-task-id");
+      const file = allFiles.find(x => x.task_id === tid);
+      if (file) openPreviewModal(file);
+    });
+  });
+
+  document.querySelectorAll(".btn-file-pin").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tid = btn.getAttribute("data-task-id");
+      const isPinned = btn.getAttribute("data-pinned") === "true";
+      const endpoint = isPinned ? `/api/files/unpin/${tid}` : `/api/files/pin/${tid}`;
+      
+      try {
+        const res = await fetch(endpoint, { method: "POST" });
+        const resData = await res.json();
+        if (resData.status === "success") {
+          const target = allFiles.find(x => x.task_id === tid);
+          if (target) target.is_pinned = resData.is_pinned;
+          renderFilesList();
+        }
+      } catch (err) {
+        console.error("Lỗi ghim tệp:", err);
+      }
+    });
+  });
+
+  document.querySelectorAll(".btn-file-copy").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const url = btn.getAttribute("data-url");
+      try {
+        await navigator.clipboard.writeText(url);
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>`;
+        setTimeout(() => { btn.innerHTML = originalHtml; }, 2000);
+      } catch (_) {}
+    });
+  });
+
+  document.querySelectorAll(".btn-file-delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tid = btn.getAttribute("data-task-id");
+      if (!confirm("Bạn có chắc chắn muốn xóa vĩnh viễn tệp này khỏi máy chủ?")) return;
+      
+      try {
+        const res = await fetch(`/api/task/${tid}/delete`, { method: "POST" });
+        const resData = await res.json();
+        if (resData.status === "success") {
+          allFiles = allFiles.filter(x => x.task_id !== tid);
+          if (filesBadge) filesBadge.innerText = allFiles.length;
+          renderFilesList();
+        }
+      } catch (err) {
+        console.error("Lỗi xóa tệp:", err);
+      }
+    });
+  });
+}
+
+// Search and Filter Listeners
+if (filesSearchInput) {
+  filesSearchInput.addEventListener("input", (e) => {
+    fileSearchQuery = e.target.value.trim();
+    renderFilesList();
+  });
+}
+
+fileFilterBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    fileFilterBtns.forEach(b => {
+      b.classList.remove("active", "bg-purple-600", "text-white");
+      b.classList.add("text-slate-400");
+    });
+    btn.classList.add("active", "bg-purple-600", "text-white");
+    btn.classList.remove("text-slate-400");
+    activeFileFilter = btn.getAttribute("data-filter");
+    renderFilesList();
+  });
+});
+
+if (btnRefreshFiles) {
+  btnRefreshFiles.addEventListener("click", loadFilesList);
+}
+
+
+// ==================== PREVIEW MODAL LOGIC ====================
+
+function openPreviewModal(file) {
+  if (!previewModal) return;
+
+  // Set file details
+  if (modalFileTitle) modalFileTitle.innerText = file.filename;
+  if (modalTypeBadge) modalTypeBadge.innerText = file.file_type.toUpperCase();
+  if (modalDownloadBtn) {
+    modalDownloadBtn.href = file.download_url;
+    modalDownloadBtn.setAttribute("download", file.filename);
+  }
+
+  // Hide all players first
+  if (modalIframe) { modalIframe.classList.add("hidden"); modalIframe.src = "about:blank"; }
+  if (modalVideo) { modalVideo.classList.add("hidden"); modalVideo.pause(); modalVideo.src = ""; }
+  if (modalAudioBox) { modalAudioBox.classList.add("hidden"); modalAudio.pause(); modalAudio.src = ""; }
+  if (modalUnsupported) modalUnsupported.classList.add("hidden");
+
+  // Show relevant viewer
+  if (file.file_type === "pdf") {
+    if (modalIframe) {
+      modalIframe.src = file.preview_url;
+      modalIframe.classList.remove("hidden");
+    }
+  } else if (file.file_type === "video") {
+    if (modalVideo) {
+      modalVideo.src = file.preview_url;
+      modalVideo.classList.remove("hidden");
+      modalVideo.play().catch(() => {});
+    }
+  } else if (file.file_type === "audio") {
+    if (modalAudioBox) {
+      modalAudio.src = file.preview_url;
+      modalAudioBox.classList.remove("hidden");
+      modalAudio.play().catch(() => {});
+    }
+  } else {
+    if (modalUnsupported) {
+      if (modalUnsupportedDownload) {
+        modalUnsupportedDownload.href = file.download_url;
+        modalUnsupportedDownload.setAttribute("download", file.filename);
+      }
+      modalUnsupported.classList.remove("hidden");
+    }
+  }
+
+  previewModal.classList.remove("hidden");
+}
+
+function closePreviewModal() {
+  if (!previewModal) return;
+  if (modalVideo) { modalVideo.pause(); modalVideo.src = ""; }
+  if (modalAudio) { modalAudio.pause(); modalAudio.src = ""; }
+  if (modalIframe) { modalIframe.src = "about:blank"; }
+  previewModal.classList.add("hidden");
+}
+
+if (modalCloseBtn) modalCloseBtn.addEventListener("click", closePreviewModal);
+if (previewModal) {
+  previewModal.addEventListener("click", (e) => {
+    if (e.target === previewModal) closePreviewModal();
+  });
+}
+
+
+// ==================== BOOKMARKLET MODAL & 1-CLICK ====================
+
+function initBookmarklet() {
+  const origin = window.location.origin;
+  const scriptCode = `javascript:(function(){var u=encodeURIComponent(window.location.href);window.open('${origin}/?url='+u,'_blank');})();`;
+  if (bookmarkletDraggableLink) {
+    bookmarkletDraggableLink.href = scriptCode;
+  }
+}
+
+if (btnOpenBookmarklet) {
+  btnOpenBookmarklet.addEventListener("click", () => {
+    initBookmarklet();
+    if (bookmarkletModal) bookmarkletModal.classList.remove("hidden");
+  });
+}
+
+if (bookmarkletCloseBtn) {
+  bookmarkletCloseBtn.addEventListener("click", () => {
+    if (bookmarkletModal) bookmarkletModal.classList.add("hidden");
+  });
+}
+
+if (bookmarkletModal) {
+  bookmarkletModal.addEventListener("click", (e) => {
+    if (e.target === bookmarkletModal) bookmarkletModal.classList.add("hidden");
+  });
+}
+
+
+// ==================== URL QUERY PARAMETER DISPATCHER ====================
+
+function handleUrlParamsOnLoad() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const incomingUrl = urlParams.get("url");
+  if (!incomingUrl) return;
+
+  const cleanUrl = decodeURIComponent(incomingUrl).trim();
+
+  if (cleanUrl.includes("scribd.com")) {
+    switchTab("scribd");
+    if (scribdUrlInput) {
+      scribdUrlInput.value = cleanUrl;
+      scribdUrlInput.focus();
+    }
+  } else if (cleanUrl.includes("youtube.com") || cleanUrl.includes("youtu.be")) {
+    switchTab("youtube");
+    if (ytUrlInput) {
+      ytUrlInput.value = cleanUrl;
+      ytUrlInput.dispatchEvent(new Event("input"));
+    }
+  } else if (cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch")) {
+    switchTab("facebook");
+    if (fbUrlInput) {
+      fbUrlInput.value = cleanUrl;
+      fbUrlInput.dispatchEvent(new Event("input"));
+    }
+  } else {
+    switchTab("direct");
+    if (directUrlInput) {
+      directUrlInput.value = cleanUrl;
+      directUrlInput.dispatchEvent(new Event("input"));
+    }
+  }
+}
+
+// Initial Boot Sequence
+document.addEventListener("DOMContentLoaded", () => {
+  initBookmarklet();
+  handleUrlParamsOnLoad();
+  loadFilesBadgeOnly();
+});
+
+// Also run immediately in case DOM is already parsed
+initBookmarklet();
+handleUrlParamsOnLoad();
+loadFilesBadgeOnly();
+
