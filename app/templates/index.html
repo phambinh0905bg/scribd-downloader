@@ -49,190 +49,153 @@
   <style>
     body { font-family: 'Inter', sans-serif; }
     .font-mono { font-family: 'JetBrains Mono', monospace; }
+    
+    /* Clean custom scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    /* Nav tab active styling in sidebar */
+    .nav-tab-btn.active {
+      background-color: #4f46e5 !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    }
+    .nav-tab-btn.active svg {
+      color: #ffffff !important;
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-blue-600 selection:text-white">
+<body class="bg-[#0b0f19] text-slate-100 h-screen flex overflow-hidden selection:bg-indigo-600 selection:text-white">
 
-  <!-- Background Glow FX -->
-  <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-    <div class="absolute -top-40 -left-40 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl"></div>
-    <div class="absolute top-1/3 -right-40 w-96 h-96 bg-red-600/10 rounded-full blur-3xl"></div>
-    <div class="absolute -bottom-40 left-1/3 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl"></div>
-  </div>
+  <!-- Mobile Sidebar Backdrop Overlay -->
+  <div id="sidebar-backdrop" class="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm hidden lg:hidden transition-opacity"></div>
 
-  <!-- Header Navigation Bar -->
-  <header class="relative z-20 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6">
-      
-      <!-- Main Row: Logo, Desktop Tabs, Status Badge -->
-      <div class="h-16 flex items-center justify-between gap-3">
-        
-        <!-- Brand Logo -->
-        <div class="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
-          <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0">
-            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-            </svg>
-          </div>
-          <div>
-            <h1 class="font-bold text-sm sm:text-base md:text-lg leading-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              Media & Doc Hub
-            </h1>
-            <p class="text-[10px] sm:text-[11px] text-slate-400">Scribd, YouTube, Facebook & URL</p>
+  <!-- Left Sidebar Navigation -->
+  <aside id="app-sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-[#0f172a] border-r border-slate-800/80 flex flex-col justify-between transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-in-out shrink-0">
+    <!-- Top Brand Header -->
+    <div class="h-16 px-5 border-b border-slate-800/80 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/30 font-bold">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        </div>
+        <div>
+          <h1 class="font-bold text-sm text-white tracking-tight">Media & Doc Hub</h1>
+          <div class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            <span class="text-[10px] text-slate-400 font-mono">v{{ app_version }}</span>
           </div>
         </div>
-
-        <!-- Desktop Navigation Menu Tabs (Hidden on mobile < md) -->
-        <nav class="hidden md:flex items-center p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
-          
-          <!-- Scribd Tab -->
-          <button id="tab-scribd" class="nav-tab-btn active flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap">
-            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-            </svg>
-            <span>Scribd PDF</span>
-          </button>
-          
-          <!-- YouTube Tab -->
-          <button id="tab-youtube" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-            </svg>
-            <span>YouTube</span>
-          </button>
-
-          <!-- Social Media Tab (Facebook, TikTok, Instagram) -->
-          <button id="tab-facebook" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-            </svg>
-            <span>Mạng Xã Hội</span>
-          </button>
-
-          <!-- Remote Direct URL Tab -->
-          <button id="tab-direct" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
-            </svg>
-            <span>Remote URL</span>
-          </button>
-
-          <!-- My Files & History Tab -->
-          <button id="tab-files" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-            </svg>
-            <span>Tệp Của Tôi</span>
-            <span id="files-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono">0</span>
-          </button>
-
-          <!-- Quick PDF & Media Tools Tab -->
-          <button id="tab-tools" class="nav-tab-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-            </svg>
-            <span>Công Cụ</span>
-          </button>
-
-          <!-- Admin Panel Tab (RBAC/ABAC) -->
-          <button id="tab-admin" class="nav-tab-btn hidden items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
-            </svg>
-            <span>Quản Trị</span>
-          </button>
-        </nav>
-        
-        <!-- Right Action & Status Badges -->
-        <div class="flex items-center gap-2 flex-shrink-0">
-          <!-- User Profile & Role Indicator -->
-          <div id="user-badge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span id="user-name-display" class="font-medium text-slate-200 truncate max-w-[90px]">admin</span>
-            <span id="user-role-display" class="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-semibold uppercase">Admin</span>
-          </div>
-          <!-- Telegram Bot Settings Button -->
-          <button id="btn-open-telegram" type="button" title="Cấu hình gửi tệp về Telegram" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-all cursor-pointer">
-            <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/>
-            </svg>
-            <span class="hidden sm:inline">Telegram</span>
-          </button>
-
-          <!-- 1-Click Bookmarklet Tool Button -->
-          <button id="btn-open-bookmarklet" type="button" title="Cài đặt Bookmarklet 1-Click tải nhanh" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-            </svg>
-            <span class="hidden sm:inline">Bookmarklet</span>
-          </button>
-
-          <!-- Logout Button -->
-          <button id="btn-logout" type="button" title="Đăng xuất khỏi hệ thống" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 transition-all cursor-pointer">
-            <svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-            </svg>
-            <span class="hidden sm:inline">Đăng Xuất</span>
-          </button>
-
-          <span class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            Lưu 5h
-          </span>
-        </div>
       </div>
-
-      <!-- Mobile Navigation Bar (Always visible on mobile < md) -->
-      <div class="md:hidden pb-3 pt-1 border-t border-slate-800/60">
-        <nav class="grid grid-cols-6 gap-1 p-1 bg-slate-800/60 rounded-xl border border-slate-700/50">
-          
-          <button id="tab-scribd-m" class="nav-tab-btn active flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-            </svg>
-            <span class="truncate text-[9px]">Scribd</span>
-          </button>
-          
-          <button id="tab-youtube-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-            </svg>
-            <span class="truncate text-[9px]">YouTube</span>
-          </button>
-
-          <button id="tab-facebook-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-sky-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-            </svg>
-            <span class="truncate text-[9px]">Mạng XH</span>
-          </button>
-
-          <button id="tab-direct-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
-            </svg>
-            <span class="truncate text-[9px]">URL Tệp</span>
-          </button>
-
-          <button id="tab-files-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path>
-            </svg>
-            <span class="truncate text-[9px]">Tệp</span>
-          </button>
-
-          <button id="tab-tools-m" class="nav-tab-btn flex items-center justify-center gap-1 px-0.5 py-2 rounded-lg text-xs font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
-            <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-            </svg>
-            <span class="truncate text-[9px]">Công Cụ</span>
-          </button>
-        </nav>
-      </div>
-
+      <button id="btn-sidebar-close" type="button" class="lg:hidden p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
     </div>
-  </header>
 
+    <!-- Navigation Menu Links -->
+    <div class="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      <!-- Group 1: TẢI DỮ LIỆU -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tải Dữ Liệu</div>
+        
+        <button id="tab-scribd" class="nav-tab-btn active w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+          <span>Scribd PDF</span>
+        </button>
+
+        <button id="tab-youtube" class="nav-tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+          <span>YouTube Video/Audio</span>
+        </button>
+
+        <button id="tab-facebook" class="nav-tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+          <span>Mạng Xã Hội</span>
+        </button>
+
+        <button id="tab-direct" class="nav-tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+          <span>Remote URL (Direct)</span>
+        </button>
+      </div>
+
+      <!-- Group 2: QUẢN LÝ & CÔNG CỤ -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kho Lưu Trữ & Tiện Ích</div>
+
+        <button id="tab-files" class="nav-tab-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <div class="flex items-center gap-3">
+            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+            <span>Tệp Của Tôi</span>
+          </div>
+          <span id="files-badge" class="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-800 text-purple-300 font-mono">0</span>
+        </button>
+
+        <button id="tab-tools" class="nav-tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+          <span>Bộ Công Cụ PDF/MP3</span>
+        </button>
+      </div>
+
+      <!-- Group 3: HỆ THỐNG -->
+      <div class="space-y-1">
+        <div class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hệ Thống</div>
+
+        <button id="tab-admin" class="nav-tab-btn w-full hidden items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <span>Quản Trị (RBAC/ABAC)</span>
+        </button>
+
+        <button id="btn-open-telegram" type="button" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-sky-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .37z"/></svg>
+          <span>Telegram Bot</span>
+        </button>
+
+        <button id="btn-open-bookmarklet" type="button" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          <span>Bookmarklet 1-Click</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- User Profile & Logout Bottom Box -->
+    <div class="p-3 border-t border-slate-800/80 bg-slate-900/40">
+      <div id="user-badge" class="flex items-center justify-between p-2 rounded-xl bg-slate-800/60 border border-slate-700/60">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center text-xs flex-shrink-0">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          </div>
+          <div class="min-w-0">
+            <div id="user-name-display" class="font-bold text-xs text-white truncate">admin</div>
+            <div id="user-role-display" class="text-[10px] text-indigo-400 font-semibold uppercase">Admin</div>
+          </div>
+        </div>
+        <button id="btn-logout" type="button" title="Đăng xuất khỏi hệ thống" class="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer flex-shrink-0">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Main Area Wrapper -->
+  <div class="flex-1 flex flex-col h-screen overflow-y-auto overflow-x-hidden lg:pl-64 w-full">
+    <!-- Top Mobile Bar -->
+    <header class="lg:hidden h-14 bg-[#0f172a] border-b border-slate-800 flex items-center justify-between px-4 sticky top-0 z-30 flex-shrink-0">
+      <button id="btn-sidebar-open" type="button" class="p-2 text-slate-300 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      </button>
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        </div>
+        <h1 class="font-bold text-xs text-white">Media & Doc Hub</h1>
+      </div>
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        Lưu 5h
+      </span>
+    </header>
 
   <!-- Main Content Container -->
   <main class="relative z-10 flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 flex flex-col gap-8">
@@ -1266,6 +1229,7 @@
       <p class="text-[11px] text-slate-600">Thư mục lưu trữ: <code>/disk1/data/downloads</code></p>
     </div>
   </footer>
+  </div>
 
   <!-- Preview Modal for In-Browser Streaming (PDF, Video, Audio, Images) -->
   <div id="preview-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 hidden">

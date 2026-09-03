@@ -19,7 +19,6 @@ WORKDIR /app
 COPY wheels /wheels
 COPY requirements.txt .
 RUN pip install --find-links=/wheels -r requirements.txt && rm -rf /wheels
-
 # Sao chép mã nguồn ứng dụng
 COPY . /app/
 RUN mkdir -p /app/downloads

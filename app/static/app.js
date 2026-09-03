@@ -108,12 +108,40 @@ const errorText = document.getElementById("error-text");
 
 // ==================== TAB NAVIGATION ====================
 
+// ==================== MOBILE SIDEBAR DRAWER TOGGLE ====================
+
+const appSidebar = document.getElementById("app-sidebar");
+const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+const btnSidebarOpen = document.getElementById("btn-sidebar-open");
+const btnSidebarClose = document.getElementById("btn-sidebar-close");
+
+function openMobileSidebar() {
+  if (appSidebar) appSidebar.classList.remove("-translate-x-full");
+  if (sidebarBackdrop) sidebarBackdrop.classList.remove("hidden");
+}
+
+function closeMobileSidebar() {
+  if (appSidebar) appSidebar.classList.add("-translate-x-full");
+  if (sidebarBackdrop) sidebarBackdrop.classList.add("hidden");
+}
+
+if (btnSidebarOpen) btnSidebarOpen.addEventListener("click", openMobileSidebar);
+if (btnSidebarClose) btnSidebarClose.addEventListener("click", closeMobileSidebar);
+if (sidebarBackdrop) sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+
+// ==================== TAB NAVIGATION ====================
+
 function switchTab(tab) {
   currentMode = tab;
   resetUI();
   progressSection.classList.add("hidden");
   resultSection.classList.add("hidden");
   errorSection.classList.add("hidden");
+
+  // On mobile screens, automatically close the sidebar drawer when a tab is clicked
+  if (window.innerWidth < 1024) {
+    closeMobileSidebar();
+  }
 
   // Reset tab button styles (Desktop & Mobile)
   [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
