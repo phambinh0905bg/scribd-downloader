@@ -16,10 +16,19 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DOWNLOADS_DIR: Path = BASE_DIR / "downloads"
     TEMP_DIR: Path = DOWNLOADS_DIR / "temp"
+    DATA_DIR: Path = BASE_DIR / "data"
     
     # Auto-cleanup Settings (in minutes - 300 minutes = 5 hours)
     CLEANUP_MINUTES: int = 300
     CLEANUP_INTERVAL_SECONDS: int = 60
+    
+    # Security & Authentication Settings
+    AUTH_ENABLED: bool = True
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123456"
+    SECRET_KEY: str = "mediadochub-secret-key-super-secure-change-in-prod-2026"
+    SESSION_EXPIRE_DAYS: int = 7
+    COOKIE_NAME: str = "auth_token"
     
     # Downloader Performance & Quality
     MAX_CONCURRENT_DOWNLOADS: int = 4
@@ -32,3 +41,6 @@ class Settings(BaseSettings):
         extra = "allow"
 
 settings = Settings()
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+settings.DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)

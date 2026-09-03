@@ -2,10 +2,12 @@ import os
 import re
 import time
 import shutil
+import socket
 import asyncio
 import logging
 import datetime
 import mimetypes
+import ipaddress
 import urllib.parse
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -14,6 +16,37 @@ import requests
 from app.config import settings
 
 logger = logging.getLogger("direct_downloader")
+
+def validate_safe_url(url: str) -> None:
+    """
+    Kiểm tra URL hợp lệ và chống tấn công Server-Side Request Forgery (SSRF).
+    Chặn triệt để các kết nối tới IP nội bộ mạng LAN gia đình, localhost, hoặc dải mạng riêng.
+    """
+    url_clean = url.strip()
+    parsed = urllib.parse.urlparse(url_clean)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Chỉ hỗ trợ tải qua giao thức HTTP hoặc HTTPS.")
+    
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Đường dẫn tệp tin không hợp lệ.")
+        
+    # Chặn các hostname nội bộ phổ biến
+    lower_host = hostname.lower()
+    if lower_host in ("localhost", "127.0.0.1", "0.0.0.0", "broadcasthost", "local", "router.local"):
+        raise ValueError("Đường dẫn mạng nội bộ (localhost) đã bị chặn vì lý do bảo mật.")
+
+    try:
+        # Phân giải hostname ra IP
+        addr_infos = socket.getaddrinfo(hostname, None)
+        for family, _, _, _, sockaddr in addr_infos:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                logger.warning(f"Chặn truy cập SSRF tới IP nội bộ: {ip_str} ({hostname})")
+                raise ValueError(f"Đường dẫn thuộc dải IP nội bộ/riêng tư ({ip_str}), đã bị chặn để bảo vệ an toàn mạng LAN.")
+    except socket.gaierror:
+        raise ValueError(f"Không thể phân giải tên miền: {hostname}")
 
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -195,6 +228,9 @@ class DirectDownloaderService:
         session = requests.Session()
         session.headers.update(DEFAULT_HEADERS)
         
+        # Anti-SSRF check
+        validate_safe_url(url)
+        
         final_url = url
         headers: Dict[str, str] = {}
         
@@ -260,6 +296,12 @@ class DirectDownloaderService:
     async def _process_download(self, task: DirectDownloadTask):
         task.update_progress("connecting", "Đang kết nối tới máy chủ tệp tin từ xa...", 0)
         
+        try:
+            validate_safe_url(task.raw_url)
+        except Exception as e:
+            task.fail_task(f"Lỗi bảo mật: {e}")
+            return
+
         def run_stream_download():
             session = requests.Session()
             session.headers.update(DEFAULT_HEADERS)

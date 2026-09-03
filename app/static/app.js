@@ -1751,6 +1751,30 @@ function handleUrlParamsOnLoad() {
   }
 }
 
+// ==================== AUTHENTICATION & LOGOUT ====================
+
+const btnLogout = document.getElementById("btn-logout");
+if (btnLogout) {
+  btnLogout.addEventListener("click", async () => {
+    if (!confirm("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?")) return;
+    try {
+      await fetch("/logout", { method: "POST" });
+    } catch (_) {}
+    window.location.href = "/login";
+  });
+}
+
+// Global 401 Interceptor: Redirect to /login if unauthorized
+const originalFetch = window.fetch;
+window.fetch = async function(...args) {
+  const response = await originalFetch(...args);
+  if (response.status === 401) {
+    const nextUrl = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.href = `/login?next=${nextUrl}`;
+  }
+  return response;
+};
+
 // Initial Boot Sequence
 document.addEventListener("DOMContentLoaded", () => {
   initBookmarklet();
@@ -1762,5 +1786,6 @@ document.addEventListener("DOMContentLoaded", () => {
 initBookmarklet();
 handleUrlParamsOnLoad();
 loadFilesBadgeOnly();
+
 
 

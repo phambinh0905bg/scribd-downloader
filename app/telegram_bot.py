@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import asyncio
 from pathlib import Path
@@ -8,19 +8,37 @@ from app.config import settings
 
 logger = logging.getLogger("telegram_bot")
 
-CONFIG_PATH = settings.DOWNLOADS_DIR / "telegram_config.json"
+CONFIG_PATH = settings.DATA_DIR / "telegram_config.json"
+OLD_CONFIG_PATH = settings.DOWNLOADS_DIR / "telegram_config.json"
 
 def get_telegram_config() -> Dict[str, Any]:
+    # Auto-migrate from old path if exists
+    if not CONFIG_PATH.exists() and OLD_CONFIG_PATH.exists():
+        try:
+            with open(OLD_CONFIG_PATH, "r", encoding="utf-8") as f:
+                old_data = json.load(f)
+            with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(old_data, f, ensure_ascii=False, indent=2)
+            OLD_CONFIG_PATH.unlink(missing_ok=True)
+            logger.info("Đã di chuyển telegram_config.json sang thư mục bảo mật DATA_DIR")
+        except Exception as e:
+            logger.warning(f"Lỗi di chuyển file config cũ: {e}")
+
     if CONFIG_PATH.exists():
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.warning(f"Lỗi đọc telegram_config.json: {e}")
+            
+    import os
+    env_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    env_chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    
     return {
-        "bot_token": "",
-        "chat_id": "",
-        "auto_send_enabled": False
+        "bot_token": env_token,
+        "chat_id": env_chat_id,
+        "auto_send_enabled": bool(env_token and env_chat_id)
     }
 
 def save_telegram_config(bot_token: str, chat_id: str, auto_send_enabled: bool) -> Dict[str, Any]:

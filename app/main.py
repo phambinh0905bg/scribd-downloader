@@ -7,14 +7,16 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+import urllib.parse
 
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
+from fastapi import FastAPI, Request, Response, HTTPException, BackgroundTasks, status
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.config import settings
+from app.auth import create_access_token, verify_access_token, authenticate_user, get_current_user
 from app.downloader import downloader_service, DownloadTask
 from app.youtube import youtube_service, YouTubeTask
 from app.facebook import facebook_service, FacebookTask
@@ -56,6 +58,41 @@ templates_dir.mkdir(parents=True, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 templates = Jinja2Templates(directory=str(templates_dir))
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """
+    Middleware xác thực: Chặn người dùng chưa đăng nhập khi truy cập giao diện hoặc gọi API.
+    Ngoại trừ: /static, /login, /logout, /favicon.ico
+    """
+    path = request.url.path
+    
+    # Danh sách đường dẫn công khai (không cần xác thực)
+    if (
+        not settings.AUTH_ENABLED
+        or path.startswith("/static")
+        or path in ("/login", "/logout", "/favicon.ico")
+    ):
+        return await call_next(request)
+        
+    user = get_current_user(request)
+    if not user:
+        accept = request.headers.get("accept", "")
+        # Nếu là request tải giao diện HTML -> chuyển hướng 302 về /login kèm param next
+        if "text/html" in accept and request.method == "GET":
+            query_part = f"?{request.url.query}" if request.url.query else ""
+            next_url = urllib.parse.quote(str(path + query_part))
+            return RedirectResponse(url=f"/login?next={next_url}", status_code=status.HTTP_302_FOUND)
+            
+        # Nếu là request gọi API -> trả về 401 Unauthorized
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Yêu cầu đăng nhập để truy cập tài nguyên này."}
+        )
+        
+    request.state.user = user
+    return await call_next(request)
 
 
 class ScribdDownloadRequest(BaseModel):
@@ -114,6 +151,58 @@ class ExtractAudioRequest(BaseModel):
     bitrate: Optional[str] = "320k"
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    remember: Optional[bool] = True
+
+
+# --- AUTHENTICATION ENDPOINTS ---
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Render trang đăng nhập. Nếu đã đăng nhập thì tự chuyển hướng về trang chủ."""
+    if settings.AUTH_ENABLED and get_current_user(request):
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"app_name": settings.APP_NAME}
+    )
+
+
+@app.post("/login")
+async def login_submit(req: LoginRequest):
+    """Xác thực thông tin đăng nhập và cấp Cookie auth_token."""
+    if not authenticate_user(req.username, req.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tên đăng nhập hoặc mật khẩu không chính xác."
+        )
+    
+    token = create_access_token(req.username, remember=bool(req.remember))
+    max_age = (settings.SESSION_EXPIRE_DAYS * 86400) if req.remember else 86400
+    
+    resp = JSONResponse(content={"status": "success", "message": "Đăng nhập thành công"})
+    resp.set_cookie(
+        key=settings.COOKIE_NAME,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        samesite="lax",
+        secure=False  # Cho phép chạy trên cả HTTP LAN và HTTPS qua Nginx Proxy Manager
+    )
+    return resp
+
+
+@app.post("/logout")
+async def logout_submit():
+    """Hủy phiên đăng nhập và xóa Cookie auth_token."""
+    resp = JSONResponse(content={"status": "success", "message": "Đã đăng xuất"})
+    resp.delete_cookie(key=settings.COOKIE_NAME)
+    return resp
+
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_index(request: Request):
     return templates.TemplateResponse(
@@ -126,6 +215,7 @@ async def serve_index(request: Request):
             "cleanup_hours": round(settings.CLEANUP_MINUTES / 60, 1)
         }
     )
+
 
 
 # --- SCRIBD ENDPOINTS ---
