@@ -167,11 +167,15 @@ def generate_barcode(
         png_b64 = base64.b64encode(png_bytes).decode("utf-8")
 
         # SVG Generation
-        svg_buffer = io.BytesIO()
-        svg_factory = qrcode.image.svg.SvgPathImage
-        svg_img = qr.make_image(image_factory=svg_factory, fill_color=fg_color, back_color=bg_color)
-        svg_img.save(svg_buffer)
-        svg_string = svg_buffer.getvalue().decode("utf-8")
+        svg_string = ""
+        try:
+            svg_buffer = io.BytesIO()
+            svg_factory = getattr(qrcode.image.svg, "SvgPathFillImage", qrcode.image.svg.SvgPathImage)
+            svg_img = qr.make_image(image_factory=svg_factory, fill_color=fg_color)
+            svg_img.save(svg_buffer)
+            svg_string = svg_buffer.getvalue().decode("utf-8")
+        except Exception as svg_err:
+            logger.warning(f"Lỗi tạo SVG cho QR code: {svg_err}")
 
         return {
             "success": True,
@@ -196,13 +200,18 @@ def generate_barcode(
     if barcode_type_lower in ("ean13", "ean8", "upca"):
         # Remove non-digits
         digits_only = re.sub(r"\D", "", sanitized_content)
-        if barcode_type_lower == "ean13" and len(digits_only) not in (12, 13):
-            raise ValueError("EAN-13 yêu cầu 12 hoặc 13 chữ số")
-        if barcode_type_lower == "ean8" and len(digits_only) not in (7, 8):
-            raise ValueError("EAN-8 yêu cầu 7 hoặc 8 chữ số")
-        if barcode_type_lower == "upca" and len(digits_only) not in (11, 12):
-            raise ValueError("UPC-A yêu cầu 11 hoặc 12 chữ số")
-        sanitized_content = digits_only
+        if barcode_type_lower == "ean13":
+            if len(digits_only) < 12:
+                raise ValueError("EAN-13 yêu cầu ít nhất 12 chữ số")
+            sanitized_content = digits_only[:12] # Thư viện tự động tính checksum số thứ 13
+        elif barcode_type_lower == "ean8":
+            if len(digits_only) < 7:
+                raise ValueError("EAN-8 yêu cầu ít nhất 7 chữ số")
+            sanitized_content = digits_only[:7] # Thư viện tự động tính checksum số thứ 8
+        elif barcode_type_lower == "upca":
+            if len(digits_only) < 11:
+                raise ValueError("UPC-A yêu cầu ít nhất 11 chữ số")
+            sanitized_content = digits_only[:11] # Thư viện tự động tính checksum số thứ 12
 
     writer_options = {
         "module_width": max(0.2, scale * 0.1),
@@ -229,10 +238,14 @@ def generate_barcode(
         png_b64 = base64.b64encode(png_bytes).decode("utf-8")
 
         # Generate SVG
-        svg_buffer = io.BytesIO()
-        svg_bc_obj = barcode_class(sanitized_content, writer=SVGWriter())
-        svg_bc_obj.write(svg_buffer, options=writer_options)
-        svg_string = svg_buffer.getvalue().decode("utf-8")
+        svg_string = ""
+        try:
+            svg_buffer = io.BytesIO()
+            svg_bc_obj = barcode_class(sanitized_content, writer=SVGWriter())
+            svg_bc_obj.write(svg_buffer, options=writer_options)
+            svg_string = svg_buffer.getvalue().decode("utf-8")
+        except Exception as svg_err:
+            logger.warning(f"Lỗi tạo SVG cho mã vạch 1D: {svg_err}")
 
         return {
             "success": True,
@@ -297,27 +310,32 @@ def decode_barcode_image(image_input: Union[bytes, Path, Image.Image]) -> Dict[s
     draw = ImageDraw.Draw(annotated_img)
 
     for idx, r in enumerate(results, start=1):
-        fmt_name = r.format.name
+        fmt_name = getattr(r.format, "name", str(r.format))
         is_2d = any(k in fmt_name.lower() for k in ["qr", "matrix", "aztec", "pdf417", "maxicode"])
         
         # Position points
-        pos = r.position
-        pts = [
-            (pos.top_left.x, pos.top_left.y),
-            (pos.top_right.x, pos.top_right.y),
-            (pos.bottom_right.x, pos.bottom_right.y),
-            (pos.bottom_left.x, pos.bottom_left.y)
-        ]
+        pts = []
+        try:
+            pos = r.position
+            pts = [
+                (pos.top_left.x, pos.top_left.y),
+                (pos.top_right.x, pos.top_right.y),
+                (pos.bottom_right.x, pos.bottom_right.y),
+                (pos.bottom_left.x, pos.bottom_left.y)
+            ]
+        except Exception:
+            pass
         
         # Draw bounding polygon on annotated image
-        try:
-            line_color = (16, 185, 129) if is_2d else (59, 130, 246) # Green for 2D, Blue for 1D
-            draw.polygon(pts, outline=line_color, width=max(3, int(min(orig_width, orig_height) / 150)))
-            for pt in pts:
-                r_dot = max(4, int(min(orig_width, orig_height) / 80))
-                draw.ellipse([pt[0] - r_dot, pt[1] - r_dot, pt[0] + r_dot, pt[1] + r_dot], fill=line_color)
-        except Exception as draw_err:
-            logger.warning(f"Lỗi vẽ annotation: {draw_err}")
+        if pts:
+            try:
+                line_color = (16, 185, 129) if is_2d else (59, 130, 246) # Green for 2D, Blue for 1D
+                draw.polygon(pts, outline=line_color, width=max(3, int(min(orig_width, orig_height) / 150)))
+                for pt in pts:
+                    r_dot = max(4, int(min(orig_width, orig_height) / 80))
+                    draw.ellipse([pt[0] - r_dot, pt[1] - r_dot, pt[0] + r_dot, pt[1] + r_dot], fill=line_color)
+            except Exception as draw_err:
+                logger.warning(f"Lỗi vẽ annotation: {draw_err}")
 
         parsed_meta = parse_barcode_content(r.text)
 
@@ -330,10 +348,10 @@ def decode_barcode_image(image_input: Union[bytes, Path, Image.Image]) -> Dict[s
             "ec_level": getattr(r, "ec_level", ""),
             "orientation": getattr(r, "orientation", 0),
             "position": {
-                "top_left": [pos.top_left.x, pos.top_left.y],
-                "top_right": [pos.top_right.x, pos.top_right.y],
-                "bottom_right": [pos.bottom_right.x, pos.bottom_right.y],
-                "bottom_left": [pos.bottom_left.x, pos.bottom_left.y]
+                "top_left": [pts[0][0], pts[0][1]] if len(pts) > 0 else [0, 0],
+                "top_right": [pts[1][0], pts[1][1]] if len(pts) > 1 else [0, 0],
+                "bottom_right": [pts[2][0], pts[2][1]] if len(pts) > 2 else [0, 0],
+                "bottom_left": [pts[3][0], pts[3][1]] if len(pts) > 3 else [0, 0]
             },
             "parsed": parsed_meta
         })
@@ -341,6 +359,8 @@ def decode_barcode_image(image_input: Union[bytes, Path, Image.Image]) -> Dict[s
     # Prepare preview image base64
     preview_thumb = annotated_img.copy()
     preview_thumb.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+    if preview_thumb.mode != "RGB":
+        preview_thumb = preview_thumb.convert("RGB")
     buf = io.BytesIO()
     preview_thumb.save(buf, format="JPEG", quality=85)
     preview_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")

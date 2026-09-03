@@ -2206,6 +2206,7 @@ if (btnRefreshLogs) btnRefreshLogs.addEventListener("click", loadAdminLogs);
 
 // ==================== BARCODE & QR CODE FEATURE ====================
 let currentBarcodeData = null;
+let currentScannedBarcodes = [];
 let currentBarcodeTemplate = "text";
 let barcodeGenDebounceTimer = null;
 let webcamMediaStream = null;
@@ -2506,8 +2507,14 @@ function buildBarcodePayload() {
     content = document.getElementById("bc-1d-content")?.value.trim() || "";
   }
 
+  let fallbackDefault = "https://scribd.binh.name.vn/";
+  if (barcodeType === "ean13") fallbackDefault = "893456789012";
+  else if (barcodeType === "ean8") fallbackDefault = "9638507";
+  else if (barcodeType === "upca") fallbackDefault = "012345678905";
+  else if (barcodeType !== "qrcode") fallbackDefault = "ITEM-12345678";
+
   return {
-    content: content || "https://google.com",
+    content: content || fallbackDefault,
     barcode_type: barcodeType,
     fg_color: fgColor,
     bg_color: bgColor,
@@ -2629,6 +2636,38 @@ function setupBarcodeScannerEvents() {
   // Camera
   if (btnOpenCam) btnOpenCam.addEventListener("click", startWebcamScanner);
   if (btnCloseCam) btnCloseCam.addEventListener("click", stopWebcamScanner);
+
+  // Delegated click listener for scanned results (avoids inline onclick syntax issues)
+  const barcodesListEl = document.getElementById("bc-barcodes-list");
+  if (barcodesListEl) {
+    barcodesListEl.addEventListener("click", (e) => {
+      const copyBtn = e.target.closest(".btn-bc-copy-code");
+      if (copyBtn) {
+        const idx = parseInt(copyBtn.getAttribute("data-bc-copy-idx"), 10);
+        const item = currentScannedBarcodes.find(x => x.index === idx);
+        if (item && item.text) copyToClipboard(item.text);
+        return;
+      }
+      const wifiBtn = e.target.closest(".btn-bc-copy-wifi");
+      if (wifiBtn) {
+        const idx = parseInt(wifiBtn.getAttribute("data-bc-wifi-idx"), 10);
+        const item = currentScannedBarcodes.find(x => x.index === idx);
+        if (item && item.parsed && item.parsed.password) {
+          copyToClipboard(item.parsed.password);
+        }
+        return;
+      }
+      const reloadBtn = e.target.closest(".btn-bc-reload-code");
+      if (reloadBtn) {
+        const idx = parseInt(reloadBtn.getAttribute("data-bc-reload-idx"), 10);
+        const item = currentScannedBarcodes.find(x => x.index === idx);
+        if (item && item.text) {
+          loadContentIntoBarcodeGenerator(item.text, item.is_2d ? "qrcode" : item.format.toLowerCase());
+        }
+        return;
+      }
+    });
+  }
 }
 
 async function populateBarcodeSystemFiles() {
@@ -2762,8 +2801,10 @@ function renderBarcodeResults(data) {
     imgDims.textContent = `Kích thước ảnh gốc: ${data.image_width} × ${data.image_height} px`;
   }
 
+  currentScannedBarcodes = data.barcodes || [];
+
   if (barcodesList) {
-    barcodesList.innerHTML = data.barcodes.map(b => {
+    barcodesList.innerHTML = currentScannedBarcodes.map(b => {
       const is2d = b.is_2d;
       const typeBadgeClass = is2d ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-blue-500/20 text-blue-300 border-blue-500/30";
       const parsed = b.parsed || {};
@@ -2788,7 +2829,7 @@ function renderBarcodeResults(data) {
               <span class="font-mono text-emerald-400 font-bold">${escapeHtml(parsed.password || '(Không có)')}</span>
             </div>
             ${parsed.password ? `
-              <button type="button" onclick="copyToClipboard('${escapeHtml(parsed.password)}')" class="w-full mt-1 py-1 px-2.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer">
+              <button type="button" data-bc-wifi-idx="${b.index}" class="btn-bc-copy-wifi w-full mt-1 py-1 px-2.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer">
                 <span>Sao chép mật khẩu</span>
               </button>
             ` : ''}
@@ -2823,11 +2864,11 @@ function renderBarcodeResults(data) {
           ${smartActionHtml}
 
           <div class="flex items-center gap-2 pt-1 border-t border-slate-800">
-            <button type="button" onclick="copyToClipboard('${escapeHtml(b.text)}')" class="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all flex items-center gap-1.5 cursor-pointer">
+            <button type="button" data-bc-copy-idx="${b.index}" class="btn-bc-copy-code py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all flex items-center gap-1.5 cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
               <span>Sao Chép</span>
             </button>
-            <button type="button" onclick="loadContentIntoBarcodeGenerator('${escapeHtml(b.text)}', '${is2d ? 'qrcode' : b.format.toLowerCase()}')" class="py-1.5 px-3 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-700/40 text-emerald-300 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer">
+            <button type="button" data-bc-reload-idx="${b.index}" class="btn-bc-reload-code py-1.5 px-3 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-700/40 text-emerald-300 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
               <span>Tạo Lại Mã Này</span>
             </button>
