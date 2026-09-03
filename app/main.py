@@ -31,8 +31,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
+from app.admin import router as admin_router
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Khởi tạo bảng PostgreSQL và seed dữ liệu Roles/Permissions/SuperAdmin ban đầu
+    try:
+        from app.database import init_db
+        init_db()
+    except Exception as e:
+        logger.error(f"Lỗi khởi tạo database trong lifespan: {e}")
+
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
     logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} started on port {settings.PORT} | Downloads dir: {settings.DOWNLOADS_DIR}")
     yield
@@ -49,6 +58,8 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan
 )
+
+app.include_router(admin_router)
 
 # Mount static and template directories
 static_dir = Path(__file__).parent / "static"
@@ -173,11 +184,19 @@ async def login_page(request: Request):
 
 @app.post("/login")
 async def login_submit(req: LoginRequest):
-    """Xác thực thông tin đăng nhập và cấp Cookie auth_token."""
-    if not authenticate_user(req.username, req.password):
+    """Xác thực thông tin đăng nhập qua Database và cấp Cookie auth_token."""
+    from app.database import SessionLocal
+    from app.auth import authenticate_user_db
+    db = SessionLocal()
+    try:
+        user = authenticate_user_db(req.username, req.password, db)
+    finally:
+        db.close()
+
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Tên đăng nhập hoặc mật khẩu không chính xác."
+            detail="Tên đăng nhập hoặc mật khẩu không chính xác hoặc tài khoản đã bị khóa."
         )
     
     token = create_access_token(req.username, remember=bool(req.remember))
@@ -218,10 +237,38 @@ async def serve_index(request: Request):
 
 
 
+def enforce_rbac_and_abac(
+    request: Request,
+    permission_code: str,
+    service: str = "general",
+    resource_url: str = "",
+    file_size_mb: Optional[float] = None,
+    is_ocr: bool = False
+):
+    """Kiểm tra quyền hạn RBAC và hạn mức ABAC trước khi thực thi tác vụ."""
+    username = getattr(request.state, "user", None)
+    if not username:
+        return
+    from app.database import SessionLocal
+    from app.auth import get_user_with_permissions, check_permission_and_abac, record_download_stat
+    db = SessionLocal()
+    try:
+        user = get_user_with_permissions(username, db)
+        if user:
+            allowed, reason = check_permission_and_abac(user, permission_code, file_size_mb=file_size_mb, is_ocr=is_ocr)
+            if not allowed:
+                raise HTTPException(status_code=403, detail=f"Chính sách bảo mật & Hạn mức: {reason}")
+            client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "")
+            record_download_stat(user.id, db, action="download", service=service, resource_url=resource_url, ip_address=client_ip, file_size_mb=file_size_mb or 0.0)
+    finally:
+        db.close()
+
+
 # --- SCRIBD ENDPOINTS ---
 
 @app.post("/api/download")
-async def start_scribd_download(req: ScribdDownloadRequest):
+async def start_scribd_download(req: ScribdDownloadRequest, request: Request):
+    enforce_rbac_and_abac(request, "download:scribd", service="scribd", resource_url=req.url, is_ocr=bool(req.enable_ocr))
     url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập đường dẫn URL tài liệu Scribd.")
@@ -264,7 +311,8 @@ async def get_youtube_video_info(req: YouTubeInfoRequest):
 
 
 @app.post("/api/youtube/download")
-async def start_youtube_download(req: YouTubeDownloadRequest):
+async def start_youtube_download(req: YouTubeDownloadRequest, request: Request):
+    enforce_rbac_and_abac(request, "download:youtube", service="youtube", resource_url=req.url)
     url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập URL YouTube.")
@@ -301,7 +349,8 @@ async def get_facebook_video_info(req: FacebookInfoRequest):
 
 
 @app.post("/api/facebook/download")
-async def start_facebook_download(req: FacebookDownloadRequest):
+async def start_facebook_download(req: FacebookDownloadRequest, request: Request):
+    enforce_rbac_and_abac(request, "download:social", service="social", resource_url=req.url)
     url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập URL Facebook.")
@@ -323,7 +372,7 @@ async def start_facebook_download(req: FacebookDownloadRequest):
     }
 
 
-# --- REMOTE DIRECT URL ENDPOINTS ---
+# --- DIRECT URL ENDPOINTS ---
 
 @app.post("/api/direct/info")
 async def get_direct_file_info(req: DirectInfoRequest):
@@ -331,14 +380,15 @@ async def get_direct_file_info(req: DirectInfoRequest):
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập URL tệp tin.")
     try:
-        info = await asyncio.to_thread(direct_downloader_service.extract_info, url)
+        info = await asyncio.to_thread(direct_downloader_service.probe_url_metadata, url)
         return {"status": "success", "data": info}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Không thể lấy thông tin tệp: {str(e)}")
 
 
 @app.post("/api/direct/download")
-async def start_direct_file_download(req: DirectDownloadRequest):
+async def start_direct_file_download(req: DirectDownloadRequest, request: Request):
+    enforce_rbac_and_abac(request, "download:direct", service="direct", resource_url=req.url)
     url = req.url.strip()
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập URL tệp tin.")

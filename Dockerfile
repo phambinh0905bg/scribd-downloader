@@ -18,7 +18,7 @@ WORKDIR /app
 # Cài đặt toàn bộ wheels offline (tốc độ < 1 giây, 0 byte tải từ internet)
 COPY wheels /wheels
 COPY requirements.txt .
-RUN pip install --no-index --find-links=/wheels -r requirements.txt && rm -rf /wheels
+RUN pip install --find-links=/wheels -r requirements.txt && rm -rf /wheels
 
 # Sao chép mã nguồn ứng dụng
 COPY . /app/

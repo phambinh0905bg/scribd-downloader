@@ -12,6 +12,7 @@ const tabFacebook = document.getElementById("tab-facebook");
 const tabDirect = document.getElementById("tab-direct");
 const tabFiles = document.getElementById("tab-files");
 const tabTools = document.getElementById("tab-tools");
+const tabAdmin = document.getElementById("tab-admin");
 
 const tabScribdM = document.getElementById("tab-scribd-m");
 const tabYouTubeM = document.getElementById("tab-youtube-m");
@@ -26,6 +27,7 @@ const viewFacebook = document.getElementById("view-facebook");
 const viewDirect = document.getElementById("view-direct");
 const viewFiles = document.getElementById("view-files");
 const viewTools = document.getElementById("view-tools");
+const viewAdmin = document.getElementById("view-admin");
 const filesBadge = document.getElementById("files-badge");
 
 // Sections
@@ -114,7 +116,7 @@ function switchTab(tab) {
   errorSection.classList.add("hidden");
 
   // Reset tab button styles (Desktop & Mobile)
-  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
+  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -128,6 +130,7 @@ function switchTab(tab) {
   if (viewDirect) viewDirect.classList.add("hidden");
   if (viewFiles) viewFiles.classList.add("hidden");
   if (viewTools) viewTools.classList.add("hidden");
+  if (viewAdmin) viewAdmin.classList.add("hidden");
 
   if (tab === "scribd") {
     if (tabScribd) { tabScribd.classList.add("active"); tabScribd.classList.remove("text-slate-400"); }
@@ -163,6 +166,10 @@ function switchTab(tab) {
     if (tabToolsM) { tabToolsM.classList.add("active"); tabToolsM.classList.remove("text-slate-400"); }
     if (viewTools) viewTools.classList.remove("hidden");
     populateToolsLists();
+  } else if (tab === "admin") {
+    if (tabAdmin) { tabAdmin.classList.add("active"); tabAdmin.classList.remove("text-slate-400"); }
+    if (viewAdmin) viewAdmin.classList.remove("hidden");
+    loadAdminUsers();
   }
 }
 
@@ -172,6 +179,7 @@ if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook
 if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
 if (tabFiles) tabFiles.addEventListener("click", () => switchTab("files"));
 if (tabTools) tabTools.addEventListener("click", () => switchTab("tools"));
+if (tabAdmin) tabAdmin.addEventListener("click", () => switchTab("admin"));
 
 if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTubeM) tabYouTubeM.addEventListener("click", () => switchTab("youtube"));
@@ -1775,17 +1783,406 @@ window.fetch = async function(...args) {
   return response;
 };
 
+// ==================== ADMIN PANEL & USER MANAGEMENT (RBAC / ABAC) ====================
+
+let currentUserProfile = null;
+
+async function initUserProfile() {
+  try {
+    const res = await fetch("/api/admin/me");
+    if (res.ok) {
+      const data = await res.json();
+      currentUserProfile = data;
+
+      const userBadge = document.getElementById("user-badge");
+      const nameDisp = document.getElementById("user-name-display");
+      const roleDisp = document.getElementById("user-role-display");
+
+      if (userBadge && nameDisp && roleDisp) {
+        userBadge.classList.remove("hidden");
+        nameDisp.innerText = data.username;
+        roleDisp.innerText = data.role_display || data.role;
+      }
+
+      // Show Admin Tab if user has admin privileges
+      if (tabAdmin && (data.is_admin || (data.permissions && data.permissions.includes("admin:users_manage")))) {
+        tabAdmin.classList.remove("hidden");
+        tabAdmin.classList.add("flex");
+      }
+    }
+  } catch (err) {
+    console.warn("Could not load user profile:", err);
+  }
+}
+
+// Admin Subtabs Navigation
+const btnAdminTabUsers = document.getElementById("btn-admin-tab-users");
+const btnAdminTabRoles = document.getElementById("btn-admin-tab-roles");
+const btnAdminTabLogs = document.getElementById("btn-admin-tab-logs");
+
+const adminSecUsers = document.getElementById("admin-sec-users");
+const adminSecRoles = document.getElementById("admin-sec-roles");
+const adminSecLogs = document.getElementById("admin-sec-logs");
+
+function switchAdminSubtab(subtab) {
+  [btnAdminTabUsers, btnAdminTabRoles, btnAdminTabLogs].forEach(btn => {
+    if (btn) {
+      btn.classList.remove("bg-rose-600", "text-white");
+      btn.classList.add("text-slate-400");
+    }
+  });
+
+  if (adminSecUsers) adminSecUsers.classList.add("hidden");
+  if (adminSecRoles) adminSecRoles.classList.add("hidden");
+  if (adminSecLogs) adminSecLogs.classList.add("hidden");
+
+  if (subtab === "users") {
+    if (btnAdminTabUsers) { btnAdminTabUsers.classList.add("bg-rose-600", "text-white"); btnAdminTabUsers.classList.remove("text-slate-400"); }
+    if (adminSecUsers) adminSecUsers.classList.remove("hidden");
+    loadAdminUsers();
+  } else if (subtab === "roles") {
+    if (btnAdminTabRoles) { btnAdminTabRoles.classList.add("bg-rose-600", "text-white"); btnAdminTabRoles.classList.remove("text-slate-400"); }
+    if (adminSecRoles) adminSecRoles.classList.remove("hidden");
+    loadAdminRoles();
+  } else if (subtab === "logs") {
+    if (btnAdminTabLogs) { btnAdminTabLogs.classList.add("bg-rose-600", "text-white"); btnAdminTabLogs.classList.remove("text-slate-400"); }
+    if (adminSecLogs) adminSecLogs.classList.remove("hidden");
+    loadAdminLogs();
+  }
+}
+
+if (btnAdminTabUsers) btnAdminTabUsers.addEventListener("click", () => switchAdminSubtab("users"));
+if (btnAdminTabRoles) btnAdminTabRoles.addEventListener("click", () => switchAdminSubtab("roles"));
+if (btnAdminTabLogs) btnAdminTabLogs.addEventListener("click", () => switchAdminSubtab("logs"));
+
+// Load Users
+async function loadAdminUsers() {
+  const tbody = document.getElementById("admin-users-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">Đang tải danh sách người dùng...</td></tr>`;
+
+  try {
+    const res = await fetch("/api/admin/users");
+    if (!res.ok) throw new Error("Không thể tải danh sách người dùng");
+    const data = await res.json();
+    const users = data.users || [];
+
+    if (users.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">Chưa có người dùng nào.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = users.map(u => {
+      const roleName = u.role ? u.role.name : "guest";
+      const roleDisp = u.role ? u.role.display_name : "Khách";
+      let roleColor = "bg-slate-700 text-slate-300";
+      if (roleName === "superadmin") roleColor = "bg-rose-500/20 text-rose-400 border border-rose-500/30";
+      else if (roleName === "vip") roleColor = "bg-amber-500/20 text-amber-400 border border-amber-500/30";
+      else if (roleName === "member") roleColor = "bg-blue-500/20 text-blue-400 border border-blue-500/30";
+
+      const maxD = u.policy ? (u.policy.max_daily_downloads === -1 ? "Vô hạn" : `${u.policy.max_daily_downloads} lượt`) : "15 lượt";
+      const usedD = u.policy ? u.policy.daily_downloads_count : 0;
+      const maxSize = u.policy ? `${u.policy.max_file_size_mb} MB` : "500 MB";
+
+      const statusBadge = u.is_active 
+        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Hoạt động</span>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>Đã khóa</span>`;
+
+      return `
+        <tr class="hover:bg-slate-800/40 transition-colors">
+          <td class="py-3 px-3">
+            <div class="font-bold text-slate-100">${u.username}</div>
+            <div class="text-[11px] text-slate-500">${u.full_name || u.email || ""}</div>
+          </td>
+          <td class="py-3 px-3">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${roleColor}">${roleDisp}</span>
+          </td>
+          <td class="py-3 px-3 font-mono text-xs">
+            <span class="text-amber-400 font-bold">${usedD}</span> / <span class="text-slate-400">${maxD}</span>
+          </td>
+          <td class="py-3 px-3 font-mono text-xs text-slate-300">${maxSize}</td>
+          <td class="py-3 px-3">${statusBadge}</td>
+          <td class="py-3 px-3 text-slate-400 text-[11px]">${u.last_login}</td>
+          <td class="py-3 px-3 text-right">
+            <div class="inline-flex items-center gap-1">
+              <button onclick="editAdminUser(${u.id})" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all text-xs" title="Sửa thông tin & Hạn mức">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+              </button>
+              ${u.username !== "admin" ? `
+                <button onclick="toggleAdminUserActive(${u.id})" class="p-1.5 rounded-lg ${u.is_active ? 'bg-amber-950/40 text-amber-400 hover:bg-amber-900/60' : 'bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/60'} transition-all text-xs" title="${u.is_active ? 'Khóa tài khoản' : 'Mở khóa'}">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${u.is_active ? 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' : 'M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z'}"></path></svg>
+                </button>
+                <button onclick="deleteAdminUser(${u.id}, '${u.username}')" class="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 transition-all text-xs" title="Xóa tài khoản">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+              ` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-rose-400">Lỗi: ${err.message}</td></tr>`;
+  }
+}
+
+// User Modal Handlers
+const userModal = document.getElementById("user-modal");
+const btnOpenCreateUser = document.getElementById("btn-open-create-user");
+const btnCloseUserModal = document.getElementById("btn-close-user-modal");
+const btnCancelUserModal = document.getElementById("btn-cancel-user-modal");
+const userModalForm = document.getElementById("user-modal-form");
+
+if (btnOpenCreateUser) {
+  btnOpenCreateUser.addEventListener("click", () => {
+    document.getElementById("user-modal-title").innerText = "Thêm Người Dùng Mới";
+    document.getElementById("modal-user-id").value = "";
+    document.getElementById("modal-username").value = "";
+    document.getElementById("modal-username").disabled = false;
+    document.getElementById("modal-password").value = "";
+    document.getElementById("modal-password").required = true;
+    document.getElementById("modal-pass-hint").innerText = "(bắt buộc)";
+    document.getElementById("modal-fullname").value = "";
+    document.getElementById("modal-role-id").value = "3";
+    document.getElementById("modal-max-daily").value = "15";
+    document.getElementById("modal-max-size").value = "500";
+    document.getElementById("modal-can-ocr").checked = true;
+    document.getElementById("modal-can-telegram").checked = true;
+    userModal.classList.remove("hidden");
+  });
+}
+
+function closeUserModal() {
+  if (userModal) userModal.classList.add("hidden");
+}
+if (btnCloseUserModal) btnCloseUserModal.addEventListener("click", closeUserModal);
+if (btnCancelUserModal) btnCancelUserModal.addEventListener("click", closeUserModal);
+
+window.editAdminUser = async function(userId) {
+  try {
+    const res = await fetch("/api/admin/users");
+    const data = await res.json();
+    const u = (data.users || []).find(x => x.id === userId);
+    if (!u) return alert("Không tìm thấy người dùng!");
+
+    document.getElementById("user-modal-title").innerText = `Chỉnh Sửa Người Dùng (${u.username})`;
+    document.getElementById("modal-user-id").value = u.id;
+    document.getElementById("modal-username").value = u.username;
+    document.getElementById("modal-username").disabled = true;
+    document.getElementById("modal-password").value = "";
+    document.getElementById("modal-password").required = false;
+    document.getElementById("modal-pass-hint").innerText = "(để trống nếu không đổi)";
+    document.getElementById("modal-fullname").value = u.full_name || "";
+    document.getElementById("modal-role-id").value = u.role ? u.role.id : "3";
+    
+    if (u.policy) {
+      document.getElementById("modal-max-daily").value = u.policy.max_daily_downloads;
+      document.getElementById("modal-max-size").value = u.policy.max_file_size_mb;
+      document.getElementById("modal-can-ocr").checked = Boolean(u.policy.can_use_ocr);
+      document.getElementById("modal-can-telegram").checked = Boolean(u.policy.can_use_telegram);
+    }
+    userModal.classList.remove("hidden");
+  } catch (err) {
+    alert("Lỗi khi tải thông tin: " + err.message);
+  }
+};
+
+if (userModalForm) {
+  userModalForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const userId = document.getElementById("modal-user-id").value;
+    const isEdit = Boolean(userId);
+
+    const payload = {
+      full_name: document.getElementById("modal-fullname").value.trim(),
+      role_id: parseInt(document.getElementById("modal-role-id").value, 10),
+      max_daily_downloads: parseInt(document.getElementById("modal-max-daily").value, 10),
+      max_file_size_mb: parseInt(document.getElementById("modal-max-size").value, 10),
+      can_use_ocr: document.getElementById("modal-can-ocr").checked,
+      can_use_telegram: document.getElementById("modal-can-telegram").checked
+    };
+
+    const pass = document.getElementById("modal-password").value;
+    if (pass) payload.password = pass;
+
+    if (!isEdit) {
+      payload.username = document.getElementById("modal-username").value.trim();
+      if (!payload.password) return alert("Vui lòng nhập mật khẩu cho tài khoản mới!");
+    }
+
+    try {
+      const url = isEdit ? `/api/admin/users/${userId}` : "/api/admin/users";
+      const method = isEdit ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Thao tác thất bại");
+      alert(data.message || "Thành công!");
+      closeUserModal();
+      loadAdminUsers();
+    } catch (err) {
+      alert("Lỗi: " + err.message);
+    }
+  });
+}
+
+window.toggleAdminUserActive = async function(userId) {
+  if (!confirm("Bạn có chắc chắn muốn thay đổi trạng thái kích hoạt của người dùng này?")) return;
+  try {
+    const res = await fetch(`/api/admin/users/${userId}/toggle-active`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Không thể thực hiện");
+    loadAdminUsers();
+  } catch (err) {
+    alert("Lỗi: " + err.message);
+  }
+};
+
+window.deleteAdminUser = async function(userId, username) {
+  if (!confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN người dùng '${username}'?`)) return;
+  try {
+    const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Không thể xóa người dùng");
+    loadAdminUsers();
+  } catch (err) {
+    alert("Lỗi: " + err.message);
+  }
+};
+
+// Roles & Permissions Matrix
+async function loadAdminRoles() {
+  const container = document.getElementById("roles-matrix-container");
+  if (!container) return;
+  container.innerHTML = `<div class="py-6 text-center text-slate-500">Đang tải ma trận phân quyền...</div>`;
+
+  try {
+    const res = await fetch("/api/admin/roles");
+    const data = await res.json();
+    const roles = data.roles || [];
+    const perms = data.permissions || [];
+
+    // Group permissions by category
+    const categories = {};
+    perms.forEach(p => {
+      if (!categories[p.category]) categories[p.category] = [];
+      categories[p.category].push(p);
+    });
+
+    container.innerHTML = roles.map(r => {
+      return `
+        <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2">
+            <div>
+              <span class="text-sm font-bold text-white">${r.display_name}</span>
+              <span class="ml-2 text-xs font-mono text-slate-400">(${r.name})</span>
+              <p class="text-xs text-slate-400 mt-0.5">${r.description}</p>
+            </div>
+            ${r.name !== "superadmin" ? `
+              <button onclick="saveRolePermissions(${r.id})" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition-all cursor-pointer">
+                Lưu Thay Đổi
+              </button>
+            ` : '<span class="text-xs text-rose-400 font-bold uppercase">Toàn Quyền Hệ Thống</span>'}
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+            ${perms.map(p => {
+              const isChecked = r.name === "superadmin" || r.permission_ids.includes(p.id);
+              const isDisabled = r.name === "superadmin";
+              return `
+                <label class="flex items-start gap-2 p-2 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs text-slate-300 ${isDisabled ? 'opacity-80' : 'cursor-pointer hover:bg-slate-900'}">
+                  <input type="checkbox" data-role-id="${r.id}" value="${p.id}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} class="mt-0.5 rounded bg-slate-900 border-slate-700 text-rose-500">
+                  <div>
+                    <div class="font-semibold text-slate-200">${p.name}</div>
+                    <div class="text-[10px] text-slate-500 font-mono">${p.code}</div>
+                  </div>
+                </label>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }).join("");
+  } catch (err) {
+    container.innerHTML = `<div class="py-6 text-center text-rose-400">Lỗi: ${err.message}</div>`;
+  }
+}
+
+window.saveRolePermissions = async function(roleId) {
+  const checkboxes = document.querySelectorAll(`input[data-role-id="${roleId}"]:checked`);
+  const permIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+
+  try {
+    const res = await fetch(`/api/admin/roles/${roleId}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ permission_ids: permIds })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Không thể cập nhật quyền hạn");
+    alert("Đã cập nhật phân quyền thành công!");
+    loadAdminRoles();
+  } catch (err) {
+    alert("Lỗi: " + err.message);
+  }
+};
+
+// Audit Logs
+async function loadAdminLogs() {
+  const tbody = document.getElementById("admin-logs-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-500 font-sans">Đang tải nhật ký...</td></tr>`;
+
+  try {
+    const res = await fetch("/api/admin/audit-logs");
+    const data = await res.json();
+    const logs = data.logs || [];
+
+    if (logs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-500 font-sans">Chưa có nhật ký nào được ghi lại.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = logs.map(l => {
+      const statusColor = l.status === "success" ? "text-emerald-400" : "text-rose-400";
+      return `
+        <tr class="hover:bg-slate-800/30 transition-colors">
+          <td class="py-2.5 px-3 text-slate-400 whitespace-nowrap">${l.timestamp}</td>
+          <td class="py-2.5 px-3 text-white font-bold">${l.username}</td>
+          <td class="py-2.5 px-3 uppercase text-[10px] text-blue-400 font-bold">${l.service}</td>
+          <td class="py-2.5 px-3 text-slate-300 truncate max-w-xs font-sans text-xs" title="${l.resource_url}">
+            ${l.resource_url ? l.resource_url : '--'}
+          </td>
+          <td class="py-2.5 px-3 text-slate-400 whitespace-nowrap">${l.ip_address || 'Local'}</td>
+          <td class="py-2.5 px-3 font-bold ${statusColor}">${l.status}</td>
+        </tr>
+      `;
+    }).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-rose-400 font-sans">Lỗi: ${err.message}</td></tr>`;
+  }
+}
+
+const btnRefreshLogs = document.getElementById("btn-refresh-logs");
+if (btnRefreshLogs) btnRefreshLogs.addEventListener("click", loadAdminLogs);
+
 // Initial Boot Sequence
 document.addEventListener("DOMContentLoaded", () => {
   initBookmarklet();
   handleUrlParamsOnLoad();
   loadFilesBadgeOnly();
+  initUserProfile();
 });
 
 // Also run immediately in case DOM is already parsed
 initBookmarklet();
 handleUrlParamsOnLoad();
 loadFilesBadgeOnly();
+initUserProfile();
+
 
 
 

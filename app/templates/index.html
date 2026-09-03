@@ -133,10 +133,24 @@
             </svg>
             <span>Công Cụ</span>
           </button>
+
+          <!-- Admin Panel Tab (RBAC/ABAC) -->
+          <button id="tab-admin" class="nav-tab-btn hidden items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+            <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+            </svg>
+            <span>Quản Trị</span>
+          </button>
         </nav>
         
         <!-- Right Action & Status Badges -->
         <div class="flex items-center gap-2 flex-shrink-0">
+          <!-- User Profile & Role Indicator -->
+          <div id="user-badge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span id="user-name-display" class="font-medium text-slate-200 truncate max-w-[90px]">admin</span>
+            <span id="user-role-display" class="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-semibold uppercase">Admin</span>
+          </div>
           <!-- Telegram Bot Settings Button -->
           <button id="btn-open-telegram" type="button" title="Cấu hình gửi tệp về Telegram" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500/20 transition-all cursor-pointer">
             <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
@@ -864,6 +878,180 @@
             <span>Trích Xuất Nhạc MP3</span>
           </button>
         </div>
+      </div>
+    <!-- ==================== VIEW 7: ADMIN MANAGEMENT (RBAC & ABAC) ==================== -->
+    <div id="view-admin" class="space-y-6 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-2">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+            Quản Trị Người Dùng & Phân Quyền Đa Tầng
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-white">Trung Tâm Quản Trị Hệ Thống</h2>
+          <p class="text-sm text-slate-400 mt-1">
+            Quản lý tài khoản, vai trò (RBAC), chính sách hạn mức tải (ABAC) và nhật ký truy cập hệ thống.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btn-open-create-user" type="button" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-rose-600/25 transition-all cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
+            </svg>
+            <span>Thêm Người Dùng Mới</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Admin Sub-navigation Tabs -->
+      <div class="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button id="btn-admin-tab-users" type="button" class="admin-tab-btn active px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white transition-all cursor-pointer flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+          <span>Danh Sách Người Dùng</span>
+        </button>
+        <button id="btn-admin-tab-roles" type="button" class="admin-tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+          <span>Ma Trận Phân Quyền (RBAC)</span>
+        </button>
+        <button id="btn-admin-tab-logs" type="button" class="admin-tab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+          <span>Nhật Ký Tải Tệp (Audit)</span>
+        </button>
+      </div>
+
+      <!-- Subview 1: Users List -->
+      <div id="admin-sec-users" class="glass-panel rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                <th class="py-3 px-3">Tài Khoản</th>
+                <th class="py-3 px-3">Vai Trò (Role)</th>
+                <th class="py-3 px-3">Hạn Mức Hôm Nay (ABAC)</th>
+                <th class="py-3 px-3">Giới Hạn File</th>
+                <th class="py-3 px-3">Trạng Thái</th>
+                <th class="py-3 px-3">Đăng Nhập Gần Nhất</th>
+                <th class="py-3 px-3 text-right">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-tbody" class="divide-y divide-slate-800/60 text-slate-300 font-medium">
+              <tr>
+                <td colspan="7" class="py-8 text-center text-slate-500">Đang tải danh sách người dùng...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Subview 2: Roles & Permissions Matrix -->
+      <div id="admin-sec-roles" class="glass-panel rounded-2xl p-4 sm:p-6 shadow-xl space-y-4 hidden">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+          <h3 class="text-base font-bold text-white">Ma Trận Quyền Hạn (Roles & Permissions)</h3>
+          <span class="text-xs text-slate-400">Xem cấu hình quyền hạn cho từng vai trò trong hệ thống</span>
+        </div>
+        <div id="roles-matrix-container" class="space-y-4">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Subview 3: Audit Logs -->
+      <div id="admin-sec-logs" class="glass-panel rounded-2xl p-4 sm:p-6 shadow-xl space-y-4 hidden">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+          <h3 class="text-base font-bold text-white">Nhật Ký Tải & Thao Tác (Audit Logs)</h3>
+          <button id="btn-refresh-logs" type="button" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200">Làm mới</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                <th class="py-3 px-3">Thời Gian</th>
+                <th class="py-3 px-3">Người Dùng</th>
+                <th class="py-3 px-3">Dịch Vụ</th>
+                <th class="py-3 px-3">Đường Dẫn Tài Nguyên</th>
+                <th class="py-3 px-3">Địa Chỉ IP</th>
+                <th class="py-3 px-3">Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="admin-logs-tbody" class="divide-y divide-slate-800/60 text-slate-300 font-mono text-[11px]">
+              <tr>
+                <td colspan="6" class="py-8 text-center text-slate-500 font-sans">Đang tải nhật ký...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- User Create / Edit Modal -->
+    <div id="user-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+      <div class="glass-panel border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h3 id="user-modal-title" class="text-base font-bold text-white">Thêm Người Dùng Mới</h3>
+          <button id="btn-close-user-modal" type="button" class="text-slate-400 hover:text-white text-lg cursor-pointer">&times;</button>
+        </div>
+
+        <form id="user-modal-form" class="space-y-4">
+          <input type="hidden" id="modal-user-id" value="">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Tên đăng nhập *</label>
+              <input type="text" id="modal-username" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Mật khẩu <span id="modal-pass-hint" class="text-slate-500 text-[10px]">(bắt buộc)</span></label>
+              <input type="password" id="modal-password" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Họ và tên</label>
+              <input type="text" id="modal-fullname" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Vai trò (Role) *</label>
+              <select id="modal-role-id" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white">
+                <option value="1">Quản Trị Viên Tối Cao (SuperAdmin)</option>
+                <option value="2">Thành Viên VIP</option>
+                <option value="3" selected>Thành Viên Chuẩn (Member)</option>
+                <option value="4">Khách Vãng Lai (Guest)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ABAC Settings -->
+          <div class="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <h4 class="text-xs font-bold text-rose-400 uppercase tracking-wider">Chính Sách Hạn Mức ABAC</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Lượt tải tối đa/ngày (-1 = vô hạn)</label>
+                <input type="number" id="modal-max-daily" value="15" class="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white">
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Dung lượng tối đa (MB)</label>
+                <input type="number" id="modal-max-size" value="500" class="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white">
+              </div>
+            </div>
+            <div class="flex items-center gap-4 pt-1">
+              <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" id="modal-can-ocr" checked class="rounded bg-slate-900 border-slate-700 text-rose-500">
+                <span>Được dùng OCR</span>
+              </label>
+              <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                <input type="checkbox" id="modal-can-telegram" checked class="rounded bg-slate-900 border-slate-700 text-rose-500">
+                <span>Được gửi Telegram</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button type="button" id="btn-cancel-user-modal" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-800 cursor-pointer">Hủy</button>
+            <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 cursor-pointer">Lưu Người Dùng</button>
+          </div>
+        </form>
       </div>
     </div>
 
