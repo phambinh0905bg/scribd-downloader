@@ -273,30 +273,31 @@ class ScribdDownloaderService:
                         
                         await wait_for_scribd_challenge(page, task)
                         
-                        # Auto-dismiss cookie / consent modals if any
-                        try:
-                            await page.evaluate("""() => {
-                                const selectors = ['#onetrust-accept-btn-handler', '.cookie-consent-accept', 'button[id*="accept"]', 'button[class*="accept"]', '.close_btn'];
-                                for (const sel of selectors) {
-                                    const btn = document.querySelector(sel);
-                                    if (btn) { btn.click(); break; }
-                                }
-                            }""")
-                        except Exception:
-                            pass
-                        
                         # Robust Progressive Page Detection (up to 3 tries with scroll & reload)
                         page_elements = []
                         total_pages_detected = 0
                         
                         for attempt in range(1, 4):
                             task.add_log(f"Đang chờ trình xem tài liệu tải xong các trang (lần {attempt}/3)...")
+                            
+                            # Auto-dismiss cookie / consent modals if any
                             try:
-                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=12000)
+                                await page.evaluate("""() => {
+                                    const selectors = ['#onetrust-accept-btn-handler', '.cookie-consent-accept', 'button[id*="accept"]', 'button[class*="accept"]', '.close_btn', 'button[aria-label="Close"]', '.banner-close-button'];
+                                    for (const sel of selectors) {
+                                        const btn = document.querySelector(sel);
+                                        if (btn) { btn.click(); }
+                                    }
+                                }""")
                             except Exception:
                                 pass
                                 
-                            await asyncio.sleep(1.0)
+                            try:
+                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=10000)
+                            except Exception:
+                                pass
+                                
+                            await asyncio.sleep(0.8)
                             page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
                             total_pages_detected = len(page_elements)
                             if total_pages_detected > 0:
@@ -305,7 +306,7 @@ class ScribdDownloaderService:
                             if attempt < 3:
                                 task.add_log("Tài liệu nạp chậm, đang thử cuộn trang và đồng bộ lại DOM...", level="warning")
                                 await page.evaluate("window.scrollTo(0, 1000); window.scrollTo(0, 0);")
-                                await asyncio.sleep(1.5)
+                                await asyncio.sleep(1.2)
                                 if attempt == 2 and target_url == embed_url:
                                     try:
                                         await page.reload(wait_until="domcontentloaded", timeout=20000)
@@ -367,9 +368,12 @@ class ScribdDownloaderService:
                         if not raw_title or raw_title.lower() in ["scribd", "client challenge"]:
                             slug_match = re.search(r'/document/\d+/([^/?#]+)', task.raw_url)
                             if slug_match:
-                                slug_name = slug_match.group(1).replace('-', ' ').replace('_', ' ').strip().title()
+                                import urllib.parse
+                                decoded_slug = urllib.parse.unquote(slug_match.group(1))
+                                slug_name = decoded_slug.replace('-', ' ').replace('_', ' ').strip().title()
                                 if slug_name and slug_name.lower() not in ["pdf", "download", "doc"]:
                                     raw_title = slug_name
+
                                     
                         raw_title = re.sub(r'\|\s*Scribd.*$', '', raw_title, flags=re.IGNORECASE).strip()
                         raw_title = re.sub(r'\|\s*PDF.*$', '', raw_title, flags=re.IGNORECASE).strip()
