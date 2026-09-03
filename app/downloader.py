@@ -315,7 +315,7 @@ class ScribdDownloaderService:
                         # Step 3: Extract Metadata & Unblur
                         task.update_progress("extracting", "Đang phân tích cấu trúc tài liệu...", 22)
                         
-                        # JS unblur and remove overlays
+                        # JS unblur, global image hydration and remove overlays
                         unblur_script = """
                         () => {
                             // 1. Remove all blur and hidden classes
@@ -331,7 +331,15 @@ class ScribdDownloaderService:
                                 el.style.display = 'none';
                             });
                             
-                            // 3. Extract title
+                            // 3. Hydrate all images with 'orig' to ensure instant CDN loading
+                            document.querySelectorAll('img.absimg').forEach(img => {
+                                let orig = img.getAttribute('orig') || img.getAttribute('data-src');
+                                if (orig && (!img.src || img.src === window.location.href)) {
+                                    img.src = orig.replace('http://html.scribd.com/', 'https://html.scribdassets.com/');
+                                }
+                            });
+                            
+                            // 4. Extract title
                             let docTitle = document.querySelector('.toolbar_title')?.innerText ||
                                            document.querySelector('h1')?.innerText ||
                                            document.querySelector('.document_title')?.innerText || 
@@ -340,10 +348,15 @@ class ScribdDownloaderService:
                                            document.title || 
                                            '';
                             
-                            let pages = document.querySelectorAll('.outer_page, div[id^="outer_page_"]');
+                            // 5. Accurate total page detection from .pageCount or DOM
+                            let pageCountEl = document.querySelector('.pageCount')?.innerText || '';
+                            let match = pageCountEl.match(/\\/\\s*(\\d+)/) || pageCountEl.match(/(\\d+)/);
+                            let totalFromCount = match ? parseInt(match[1]) : 0;
+                            let domPages = document.querySelectorAll('.outer_page, div[id^="outer_page_"]').length;
+                            
                             return {
                                 title: docTitle.trim(),
-                                pageCount: pages.length
+                                pageCount: Math.max(totalFromCount, domPages)
                             };
                         }
                         """
@@ -369,27 +382,8 @@ class ScribdDownloaderService:
                         task.add_log(f"Tiêu đề tài liệu: \"{task.title}\"")
                         
                         page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
-                        total_pages_detected = len(page_elements)
-                        
-                        # Fallback to direct document page if embed had 0 pages
-                        if total_pages_detected == 0 and target_url != fallback_url:
-                            task.add_log(f"Chuyển sang trang tài liệu chính: {fallback_url}...", level="warning")
-                            try:
-                                await page.goto(fallback_url, wait_until="domcontentloaded", timeout=20000)
-                                await wait_for_scribd_challenge(page, task)
-                                await page.wait_for_selector(".outer_page, div[id^='outer_page_']", timeout=15000)
-                                await asyncio.sleep(1.0)
-                                await page.evaluate(unblur_script)
-                                page_elements = await page.query_selector_all(".outer_page, div[id^='outer_page_']")
-                                total_pages_detected = len(page_elements)
-                            except Exception:
-                                pass
-
-
-
-
-
-
+                        meta_page_count = meta.get("pageCount", 0)
+                        total_pages_detected = max(meta_page_count, len(page_elements))
                         
                         if total_pages_detected == 0:
                             task.error_message = "Không tìm thấy trang nào trong tài liệu này (có thể tài liệu đã bị xóa hoặc ở chế độ riêng tư)."
@@ -405,7 +399,7 @@ class ScribdDownloaderService:
                         task.update_progress("rendering", f"Bắt đầu chụp {total_target} trang chất lượng cao...", 30)
 
                         
-                        # Step 4: Capture HD Screenshots
+                        # Step 4: Capture HD Screenshots with Anti-Blank Verification
                         captured_images = []
                         
                         for idx, page_num in enumerate(task.target_pages, start=1):
@@ -438,14 +432,20 @@ class ScribdDownloaderService:
                             if element:
                                 try:
                                     await element.scroll_into_view_if_needed()
+                                    
+                                    # Hydrate and unblur page element
                                     await page.evaluate("""
                                     (el) => {
-                                        el.classList.remove('page_blur', 'page_missing', 'blurred_page', 'blurred', 'missing_page');
+                                        el.classList.remove('page_blur', 'page_missing', 'blurred_page', 'blurred', 'missing_page', 'not_visible');
                                         el.style.filter = 'none';
                                         el.style.opacity = '1';
                                         el.style.display = 'block';
                                         
                                         el.querySelectorAll('img').forEach(img => {
+                                            let orig = img.getAttribute('orig') || img.getAttribute('data-src');
+                                            if (orig && (!img.src || img.src === window.location.href)) {
+                                                img.src = orig.replace('http://html.scribd.com/', 'https://html.scribdassets.com/');
+                                            }
                                             img.style.filter = 'none';
                                             img.style.opacity = '1';
                                             img.style.visibility = 'visible';
@@ -453,7 +453,31 @@ class ScribdDownloaderService:
                                     }
                                     """, element)
                                     
-                                    await asyncio.sleep(0.3)
+                                    # Wait for images in this element to finish downloading (Anti-Blank Protection)
+                                    await page.evaluate("""
+                                    (el) => {
+                                        return new Promise((resolve) => {
+                                            const imgs = Array.from(el.querySelectorAll('img.absimg, img'));
+                                            if (imgs.length === 0) { resolve(); return; }
+                                            let remaining = imgs.length;
+                                            const checkDone = () => {
+                                                remaining--;
+                                                if (remaining <= 0) resolve();
+                                            };
+                                            imgs.forEach(img => {
+                                                if (img.complete && img.naturalWidth > 0) {
+                                                    checkDone();
+                                                } else {
+                                                    img.addEventListener('load', checkDone, { once: true });
+                                                    img.addEventListener('error', checkDone, { once: true });
+                                                }
+                                            });
+                                            setTimeout(resolve, 2500);
+                                        });
+                                    }
+                                    """, element)
+                                    
+                                    await asyncio.sleep(0.2)
                                     await element.screenshot(path=str(img_path), type="jpeg", quality=95)
                                     if img_path.exists() and img_path.stat().st_size > 0:
                                         captured_images.append(img_path)
@@ -466,8 +490,8 @@ class ScribdDownloaderService:
                                 task.add_log(f"Không thể định vị trang {page_num}, chụp màn hình hiện tại...", level="warning")
                                 await page.screenshot(path=str(img_path), type="jpeg", quality=95)
                                 captured_images.append(img_path)
-
                                 task.add_log(f"Bỏ qua trang {page_num} do không tìm thấy thẻ DOM.", level="warning")
+
                         
                         if not captured_images:
                             task.error_message = "Không trích xuất được hình ảnh nào từ tài liệu."
