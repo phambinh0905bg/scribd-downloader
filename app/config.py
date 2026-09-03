@@ -5,7 +5,8 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # App Information
     APP_NAME: str = "Media & Doc Hub"
-    APP_VERSION: str = "2.1.1"
+    APP_VERSION: str = "2.1.2"
+    APP_DEBUG: bool = False
     
     # Server Settings
     HOST: str = "0.0.0.0"
