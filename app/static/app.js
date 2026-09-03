@@ -1855,7 +1855,7 @@ const adminSecLogs = document.getElementById("admin-sec-logs");
 function switchAdminSubtab(subtab) {
   [btnAdminTabUsers, btnAdminTabRoles, btnAdminTabLogs].forEach(btn => {
     if (btn) {
-      btn.classList.remove("bg-rose-600", "text-white");
+      btn.classList.remove("bg-indigo-600", "text-white");
       btn.classList.add("text-slate-400");
     }
   });
@@ -1865,15 +1865,15 @@ function switchAdminSubtab(subtab) {
   if (adminSecLogs) adminSecLogs.classList.add("hidden");
 
   if (subtab === "users") {
-    if (btnAdminTabUsers) { btnAdminTabUsers.classList.add("bg-rose-600", "text-white"); btnAdminTabUsers.classList.remove("text-slate-400"); }
+    if (btnAdminTabUsers) { btnAdminTabUsers.classList.add("bg-indigo-600", "text-white"); btnAdminTabUsers.classList.remove("text-slate-400"); }
     if (adminSecUsers) adminSecUsers.classList.remove("hidden");
     loadAdminUsers();
   } else if (subtab === "roles") {
-    if (btnAdminTabRoles) { btnAdminTabRoles.classList.add("bg-rose-600", "text-white"); btnAdminTabRoles.classList.remove("text-slate-400"); }
+    if (btnAdminTabRoles) { btnAdminTabRoles.classList.add("bg-indigo-600", "text-white"); btnAdminTabRoles.classList.remove("text-slate-400"); }
     if (adminSecRoles) adminSecRoles.classList.remove("hidden");
     loadAdminRoles();
   } else if (subtab === "logs") {
-    if (btnAdminTabLogs) { btnAdminTabLogs.classList.add("bg-rose-600", "text-white"); btnAdminTabLogs.classList.remove("text-slate-400"); }
+    if (btnAdminTabLogs) { btnAdminTabLogs.classList.add("bg-indigo-600", "text-white"); btnAdminTabLogs.classList.remove("text-slate-400"); }
     if (adminSecLogs) adminSecLogs.classList.remove("hidden");
     loadAdminLogs();
   }

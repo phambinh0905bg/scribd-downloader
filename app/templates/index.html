@@ -420,29 +420,29 @@
     </div>
 
 
-    <!-- ==================== VIEW 3: FACEBOOK DOWNLOADER ==================== -->
+    <!-- ==================== VIEW 3: SOCIAL MEDIA DOWNLOADER ==================== -->
     <div id="view-facebook" class="space-y-8 hidden">
       <div class="text-center space-y-3 pt-2">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
           <svg class="w-3.5 h-3.5 text-sky-400" fill="currentColor" viewBox="0 0 24 24">
             <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
           </svg>
-          Hỗ trợ Facebook Reels, Watch, Video Posts & Âm thanh MP3
+          Hỗ trợ Facebook, TikTok, Instagram & Âm thanh MP3
         </div>
         <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-          Tải Video & Audio <span class="bg-gradient-to-r from-sky-400 to-blue-400 bg-clip-text text-transparent">Facebook Dễ Dàng</span>
+          Tải Video & Audio <span class="bg-gradient-to-r from-sky-400 to-indigo-400 bg-clip-text text-transparent">Mạng Xã Hội</span>
         </h2>
         <p class="text-slate-400 max-w-xl mx-auto text-sm sm:text-base">
-          Dán liên kết Video Facebook (Reels, Watch, Video bài viết) để tải video MP4 HD hoặc tách âm thanh MP3.
+          Dán liên kết Video từ Facebook, TikTok, Instagram hoặc Twitter để tải video chất lượng cao hoặc tách âm thanh MP3.
         </p>
       </div>
 
-      <!-- Facebook Input Form -->
+      <!-- Social Input Form -->
       <div id="fb-input-section" class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
         <form id="fb-form" class="space-y-5">
           <div class="space-y-2">
             <label for="fb-url-input" class="block text-sm font-semibold text-slate-200">
-              Đường dẫn Video Facebook <span class="text-sky-400">*</span>
+              Đường dẫn Video Mạng Xã Hội <span class="text-sky-400">*</span>
             </label>
             <div class="relative flex items-center">
               <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -454,8 +454,8 @@
                 type="url" 
                 id="fb-url-input" 
                 required 
-                placeholder="https://www.facebook.com/watch?v=... hoặc https://www.facebook.com/reel/..." 
-                class="w-full pl-11 pr-24 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-all shadow-inner text-sm sm:text-base"
+                placeholder="https://www.facebook.com/... hoặc https://www.tiktok.com/... hoặc https://www.instagram.com/..." 
+                class="w-full pl-11 pr-24 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-inner text-sm sm:text-base"
               >
               <div class="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
                 <button type="button" id="btn-fb-paste" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium">
@@ -755,7 +755,7 @@
             </div>
           </div>
 
-          <button id="btn-run-compress" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-blue-600 hover:bg-blue-500 transition-all cursor-pointer flex items-center justify-center gap-1.5">
+          <button id="btn-run-compress" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5">
             <span>Bắt Đầu Nén PDF</span>
           </button>
         </div>
@@ -763,7 +763,7 @@
         <!-- Tool 2: Merge PDFs -->
         <div class="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 flex flex-col justify-between">
           <div class="space-y-3">
-            <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
               </svg>
@@ -788,13 +788,13 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 Ghép thành công! (<span id="tool-merge-pages">--</span> trang)
               </div>
-              <a id="tool-merge-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs">
+              <a id="tool-merge-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs">
                 Tải File Ghép
               </a>
             </div>
           </div>
 
-          <button id="btn-run-merge" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-purple-600 hover:bg-purple-500 transition-all cursor-pointer flex items-center justify-center gap-1.5">
+          <button id="btn-run-merge" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5">
             <span>Ghép Các Tệp Này</span>
           </button>
         </div>
@@ -802,7 +802,7 @@
         <!-- Tool 3: Extract Audio from Video -->
         <div class="glass-panel rounded-2xl p-5 sm:p-6 space-y-4 flex flex-col justify-between">
           <div class="space-y-3">
-            <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
               </svg>
@@ -812,7 +812,7 @@
             
             <div class="space-y-1.5 pt-2">
               <label class="block text-xs font-semibold text-slate-300">Chọn tệp video:</label>
-              <select id="tool-audio-select" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 focus:ring-1 focus:ring-amber-500">
+              <select id="tool-audio-select" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 focus:ring-1 focus:ring-indigo-500">
                 <option value="">-- Chọn video từ thư viện --</option>
               </select>
             </div>
@@ -831,13 +831,13 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
                 Đã tách nhạc MP3 thành công!
               </div>
-              <a id="tool-audio-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs">
+              <a id="tool-audio-download-btn" href="#" download class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs">
                 Tải Nhạc MP3
               </a>
             </div>
           </div>
 
-          <button id="btn-run-audio" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-slate-950 bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 transition-all cursor-pointer flex items-center justify-center gap-1.5 font-bold">
+          <button id="btn-run-audio" type="button" class="w-full py-2.5 px-4 rounded-xl font-semibold text-xs text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5">
             <span>Trích Xuất Nhạc MP3</span>
           </button>
         </div>
@@ -861,7 +861,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <button id="btn-open-create-user" type="button" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-bold shadow-lg shadow-rose-600/25 transition-all cursor-pointer">
+          <button id="btn-open-create-user" type="button" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/25 transition-all cursor-pointer">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
             </svg>
@@ -872,7 +872,7 @@
 
       <!-- Admin Sub-navigation Tabs -->
       <div class="flex items-center gap-2 border-b border-slate-800 pb-3">
-        <button id="btn-admin-tab-users" type="button" class="admin-tab-btn active px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white transition-all cursor-pointer flex items-center gap-2">
+        <button id="btn-admin-tab-users" type="button" class="admin-tab-btn active px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white transition-all cursor-pointer flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
           <span>Danh Sách Người Dùng</span>
         </button>
