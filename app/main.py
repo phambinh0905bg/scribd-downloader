@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 import urllib.parse
 
-from fastapi import FastAPI, Request, Response, HTTPException, BackgroundTasks, status
+from fastapi import FastAPI, Request, Response, HTTPException, BackgroundTasks, status, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -160,6 +160,22 @@ class MergePdfsRequest(BaseModel):
 class ExtractAudioRequest(BaseModel):
     task_id: str
     bitrate: Optional[str] = "320k"
+
+
+class BarcodeGenerateRequest(BaseModel):
+    content: str
+    barcode_type: str = "qrcode"
+    fg_color: str = "#000000"
+    bg_color: str = "#ffffff"
+    ec_level: str = "M"
+    scale: int = 4
+    show_text: bool = True
+    save_to_downloads: bool = False
+
+
+class BarcodeDecodePayload(BaseModel):
+    image_base64: Optional[str] = None
+    task_id: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -875,5 +891,100 @@ async def api_extract_audio(req: ExtractAudioRequest):
             "size_mb": res["size_mb"]
         }
     raise HTTPException(status_code=400, detail=res.get("error", "Lỗi tách âm thanh từ video"))
+
+
+@app.post("/api/tools/barcode/generate")
+async def api_generate_barcode(req: BarcodeGenerateRequest):
+    """Generate 1D or 2D Barcode / QR Code image and metadata."""
+    from app.barcode_service import generate_barcode
+    try:
+        res = generate_barcode(
+            content=req.content,
+            barcode_type=req.barcode_type,
+            fg_color=req.fg_color,
+            bg_color=req.bg_color,
+            ec_level=req.ec_level,
+            scale=req.scale,
+            show_text=req.show_text
+        )
+
+        # Optionally save to user's downloads library
+        if req.save_to_downloads:
+            import base64
+            png_bytes = base64.b64decode(res["data_url"].split(",", 1)[1])
+            new_task_id = str(uuid.uuid4())[:8]
+            new_dir = settings.DOWNLOADS_DIR / new_task_id
+            new_dir.mkdir(parents=True, exist_ok=True)
+            
+            clean_type = req.barcode_type.lower()
+            filename = f"barcode_{clean_type}_{new_task_id}.png"
+            out_path = new_dir / filename
+            out_path.write_bytes(png_bytes)
+            
+            res["task_id"] = new_task_id
+            res["filename"] = filename
+            res["download_url"] = f"/api/file/{new_task_id}"
+
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Lỗi tạo mã barcode/qr: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi hệ thống khi tạo mã: {str(e)}")
+
+
+@app.post("/api/tools/barcode/decode")
+async def api_decode_barcode_json(payload: BarcodeDecodePayload):
+    """Decode barcode from base64 data URI or existing task_id image."""
+    from app.barcode_service import decode_barcode_image
+    import base64
+
+    try:
+        if payload.image_base64:
+            raw_b64 = payload.image_base64
+            if "," in raw_b64:
+                raw_b64 = raw_b64.split(",", 1)[1]
+            img_bytes = base64.b64decode(raw_b64)
+            result = decode_barcode_image(img_bytes)
+            return result
+
+        if payload.task_id:
+            task_dir = settings.DOWNLOADS_DIR / payload.task_id
+            if not task_dir.exists():
+                raise HTTPException(status_code=404, detail="Không tìm thấy thư mục tệp")
+            
+            valid_exts = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff"}
+            images = [f for f in task_dir.iterdir() if f.suffix.lower() in valid_exts]
+            if not images:
+                raise HTTPException(status_code=404, detail="Không tìm thấy tệp ảnh nào trong tác vụ này")
+            
+            result = decode_barcode_image(images[0])
+            return result
+
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp dữ liệu ảnh (base64) hoặc task_id")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lỗi giải mã barcode: {e}")
+        raise HTTPException(status_code=400, detail=f"Không thể đọc mã từ hình ảnh: {str(e)}")
+
+
+@app.post("/api/tools/barcode/decode-file")
+async def api_decode_barcode_file(file: UploadFile = File(...)):
+    """Decode barcode from uploaded image file."""
+    from app.barcode_service import decode_barcode_image
+
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Tệp tải lên rỗng")
+            
+        result = decode_barcode_image(content)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lỗi giải mã barcode từ file tải lên: {e}")
+        raise HTTPException(status_code=400, detail=f"Không thể đọc mã từ tệp: {str(e)}")
 
 

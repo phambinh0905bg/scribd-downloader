@@ -12,6 +12,7 @@ const tabFacebook = document.getElementById("tab-facebook");
 const tabDirect = document.getElementById("tab-direct");
 const tabFiles = document.getElementById("tab-files");
 const tabTools = document.getElementById("tab-tools");
+const tabBarcode = document.getElementById("tab-barcode");
 const tabAdmin = document.getElementById("tab-admin");
 
 const tabScribdM = document.getElementById("tab-scribd-m");
@@ -27,6 +28,7 @@ const viewFacebook = document.getElementById("view-facebook");
 const viewDirect = document.getElementById("view-direct");
 const viewFiles = document.getElementById("view-files");
 const viewTools = document.getElementById("view-tools");
+const viewBarcode = document.getElementById("view-barcode");
 const viewAdmin = document.getElementById("view-admin");
 const filesBadge = document.getElementById("files-badge");
 
@@ -144,7 +146,7 @@ function switchTab(tab) {
   }
 
   // Reset tab button styles (Desktop & Mobile)
-  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
+  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabBarcode, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -158,6 +160,7 @@ function switchTab(tab) {
   if (viewDirect) viewDirect.classList.add("hidden");
   if (viewFiles) viewFiles.classList.add("hidden");
   if (viewTools) viewTools.classList.add("hidden");
+  if (viewBarcode) viewBarcode.classList.add("hidden");
   if (viewAdmin) viewAdmin.classList.add("hidden");
 
   if (tab === "scribd") {
@@ -194,6 +197,10 @@ function switchTab(tab) {
     if (tabToolsM) { tabToolsM.classList.add("active"); tabToolsM.classList.remove("text-slate-400"); }
     if (viewTools) viewTools.classList.remove("hidden");
     populateToolsLists();
+  } else if (tab === "barcode") {
+    if (tabBarcode) { tabBarcode.classList.add("active"); tabBarcode.classList.remove("text-slate-400"); }
+    if (viewBarcode) viewBarcode.classList.remove("hidden");
+    initBarcodeView();
   } else if (tab === "admin") {
     if (tabAdmin) { tabAdmin.classList.add("active"); tabAdmin.classList.remove("text-slate-400"); }
     if (viewAdmin) viewAdmin.classList.remove("hidden");
@@ -207,6 +214,7 @@ if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook
 if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
 if (tabFiles) tabFiles.addEventListener("click", () => switchTab("files"));
 if (tabTools) tabTools.addEventListener("click", () => switchTab("tools"));
+if (tabBarcode) tabBarcode.addEventListener("click", () => switchTab("barcode"));
 if (tabAdmin) tabAdmin.addEventListener("click", () => switchTab("admin"));
 
 if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
@@ -1856,7 +1864,6 @@ function switchAdminSubtab(subtab) {
   [btnAdminTabUsers, btnAdminTabRoles, btnAdminTabLogs].forEach(btn => {
     if (btn) {
       btn.classList.remove("bg-indigo-600", "text-white");
-      btn.classList.add("text-slate-400");
     }
   });
 
@@ -2196,6 +2203,736 @@ async function loadAdminLogs() {
 
 const btnRefreshLogs = document.getElementById("btn-refresh-logs");
 if (btnRefreshLogs) btnRefreshLogs.addEventListener("click", loadAdminLogs);
+
+// ==================== BARCODE & QR CODE FEATURE ====================
+let currentBarcodeData = null;
+let currentBarcodeTemplate = "text";
+let barcodeGenDebounceTimer = null;
+let webcamMediaStream = null;
+let webcamScanInterval = null;
+let barcodeViewInitialized = false;
+
+function showBarcodeAlert(msg) {
+  alert(msg);
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Đã sao chép vào bộ nhớ tạm!");
+    }).catch(() => {
+      prompt("Nhấn Ctrl+C để sao chép:", text);
+    });
+  } else {
+    prompt("Nhấn Ctrl+C để sao chép:", text);
+  }
+}
+
+function initBarcodeView() {
+  if (!barcodeViewInitialized) {
+    setupBarcodeGeneratorEvents();
+    setupBarcodeScannerEvents();
+    barcodeViewInitialized = true;
+  }
+  populateBarcodeSystemFiles();
+  if (!currentBarcodeData) {
+    triggerGenerateBarcode();
+  }
+}
+
+function setupBarcodeGeneratorEvents() {
+  // Sub-tabs: Gen vs Scan
+  const subtabGen = document.getElementById("subtab-bc-gen");
+  const subtabScan = document.getElementById("subtab-bc-scan");
+  const sectionGen = document.getElementById("section-bc-gen");
+  const sectionScan = document.getElementById("section-bc-scan");
+
+  if (subtabGen && subtabScan) {
+    subtabGen.addEventListener("click", () => {
+      subtabGen.classList.add("bg-emerald-600", "text-white", "shadow-md", "shadow-emerald-600/20");
+      subtabGen.classList.remove("text-slate-400");
+      subtabScan.classList.remove("bg-emerald-600", "text-white", "shadow-md", "shadow-emerald-600/20");
+      subtabScan.classList.add("text-slate-400");
+      if (sectionGen) sectionGen.classList.remove("hidden");
+      if (sectionScan) sectionScan.classList.add("hidden");
+      stopWebcamScanner();
+    });
+
+    subtabScan.addEventListener("click", () => {
+      subtabScan.classList.add("bg-emerald-600", "text-white", "shadow-md", "shadow-emerald-600/20");
+      subtabScan.classList.remove("text-slate-400");
+      subtabGen.classList.remove("bg-emerald-600", "text-white", "shadow-md", "shadow-emerald-600/20");
+      subtabGen.classList.add("text-slate-400");
+      if (sectionScan) sectionScan.classList.remove("hidden");
+      if (sectionGen) sectionGen.classList.add("hidden");
+    });
+  }
+
+  // Type change
+  const bcTypeSelect = document.getElementById("bc-gen-type");
+  const qrTemplatesContainer = document.getElementById("bc-qr-templates-container");
+  const bc1dInputContainer = document.getElementById("bc-1d-input-container");
+  const bcEcContainer = document.getElementById("bc-ec-container");
+  const bc1dHint = document.getElementById("bc-1d-hint");
+  const bc1dContent = document.getElementById("bc-1d-content");
+
+  if (bcTypeSelect) {
+    bcTypeSelect.addEventListener("change", () => {
+      const isQr = bcTypeSelect.value === "qrcode";
+      if (isQr) {
+        if (qrTemplatesContainer) qrTemplatesContainer.classList.remove("hidden");
+        if (bc1dInputContainer) bc1dInputContainer.classList.add("hidden");
+        if (bcEcContainer) bcEcContainer.classList.remove("hidden");
+      } else {
+        if (qrTemplatesContainer) qrTemplatesContainer.classList.add("hidden");
+        if (bc1dInputContainer) bc1dInputContainer.classList.remove("hidden");
+        if (bcEcContainer) bcEcContainer.classList.add("hidden");
+        
+        // Update placeholder & hint
+        if (bcTypeSelect.value === "ean13") {
+          if (bc1dHint) bc1dHint.innerText = "EAN-13 yêu cầu 12 hoặc 13 chữ số (ví dụ: 893456789012).";
+          if (bc1dContent && !/^\d{12,13}$/.test(bc1dContent.value)) bc1dContent.value = "893456789012";
+        } else if (bcTypeSelect.value === "ean8") {
+          if (bc1dHint) bc1dHint.innerText = "EAN-8 yêu cầu 7 hoặc 8 chữ số (ví dụ: 1234567).";
+          if (bc1dContent && !/^\d{7,8}$/.test(bc1dContent.value)) bc1dContent.value = "9638507";
+        } else if (bcTypeSelect.value === "upca") {
+          if (bc1dHint) bc1dHint.innerText = "UPC-A yêu cầu 11 hoặc 12 chữ số (ví dụ: 01234567890).";
+          if (bc1dContent && !/^\d{11,12}$/.test(bc1dContent.value)) bc1dContent.value = "012345678905";
+        } else {
+          if (bc1dHint) bc1dHint.innerText = "Hỗ trợ các ký tự số, chữ in và ký hiệu chuẩn.";
+          if (bc1dContent && !bc1dContent.value) bc1dContent.value = "ITEM-12345678";
+        }
+      }
+      triggerGenerateBarcode();
+    });
+  }
+
+  // Template switch for QR
+  const tplButtons = document.querySelectorAll(".bc-tpl-btn");
+  tplButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      tplButtons.forEach(b => {
+        b.classList.remove("active", "bg-emerald-500/20", "text-emerald-300", "border-emerald-500/30");
+        b.classList.add("bg-slate-900", "text-slate-400", "border-slate-800");
+      });
+      btn.classList.add("active", "bg-emerald-500/20", "text-emerald-300", "border-emerald-500/30");
+      btn.classList.remove("bg-slate-900", "text-slate-400", "border-slate-800");
+
+      currentBarcodeTemplate = btn.getAttribute("data-tpl");
+      ["text", "wifi", "contact", "phone", "email"].forEach(t => {
+        const fieldEl = document.getElementById(`tpl-field-${t}`);
+        if (fieldEl) {
+          if (t === currentBarcodeTemplate) fieldEl.classList.remove("hidden");
+          else fieldEl.classList.add("hidden");
+        }
+      });
+      triggerGenerateBarcode();
+    });
+  });
+
+  // Color picker sync
+  const fgColor = document.getElementById("bc-fg-color");
+  const fgLabel = document.getElementById("bc-fg-label");
+  const bgColor = document.getElementById("bc-bg-color");
+  const bgLabel = document.getElementById("bc-bg-label");
+
+  if (fgColor && fgLabel) {
+    fgColor.addEventListener("input", () => {
+      fgLabel.textContent = fgColor.value;
+      debouncedGenerateBarcode();
+    });
+  }
+  if (bgColor && bgLabel) {
+    bgColor.addEventListener("input", () => {
+      bgLabel.textContent = bgColor.value;
+      debouncedGenerateBarcode();
+    });
+  }
+
+  // Other controls
+  ["bc-scale", "bc-ec-level", "bc-wifi-auth", "bc-wifi-hidden"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("change", () => triggerGenerateBarcode());
+  });
+
+  // Inputs real-time debounced trigger
+  [
+    "bc-input-text", "bc-1d-content", "bc-wifi-ssid", "bc-wifi-pass",
+    "bc-contact-name", "bc-contact-tel", "bc-contact-email", "bc-contact-org",
+    "bc-phone-num", "bc-email-to", "bc-email-subject"
+  ].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", () => debouncedGenerateBarcode());
+  });
+
+  // Generate button
+  const btnGen = document.getElementById("btn-generate-barcode");
+  if (btnGen) btnGen.addEventListener("click", () => triggerGenerateBarcode());
+
+  // Download PNG
+  const btnDlPng = document.getElementById("btn-bc-dl-png");
+  if (btnDlPng) {
+    btnDlPng.addEventListener("click", () => {
+      if (!currentBarcodeData || !currentBarcodeData.data_url) return;
+      const a = document.createElement("a");
+      a.href = currentBarcodeData.data_url;
+      a.download = `barcode_${currentBarcodeData.barcode_type}_${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  }
+
+  // Download SVG
+  const btnDlSvg = document.getElementById("btn-bc-dl-svg");
+  if (btnDlSvg) {
+    btnDlSvg.addEventListener("click", () => {
+      if (!currentBarcodeData || !currentBarcodeData.svg) {
+        showBarcodeAlert("Không có định dạng SVG cho mã này");
+        return;
+      }
+      const blob = new Blob([currentBarcodeData.svg], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `barcode_${currentBarcodeData.barcode_type}_${Date.now()}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // Copy Image to Clipboard
+  const btnCopyImg = document.getElementById("btn-bc-copy-img");
+  if (btnCopyImg) {
+    btnCopyImg.addEventListener("click", async () => {
+      if (!currentBarcodeData || !currentBarcodeData.data_url) return;
+      try {
+        const res = await fetch(currentBarcodeData.data_url);
+        const blob = await res.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+        const origSpan = btnCopyImg.querySelector("span");
+        if (origSpan) {
+          const origText = origSpan.innerText;
+          origSpan.innerText = "Đã chép!";
+          btnCopyImg.classList.add("text-emerald-400");
+          setTimeout(() => {
+            origSpan.innerText = origText;
+            btnCopyImg.classList.remove("text-emerald-400");
+          }, 2000);
+        }
+      } catch (err) {
+        showBarcodeAlert("Không thể sao chép ảnh vào clipboard: " + err.message);
+      }
+    });
+  }
+
+  // Save to system files
+  const btnSaveServer = document.getElementById("btn-bc-save-server");
+  if (btnSaveServer) {
+    btnSaveServer.addEventListener("click", async () => {
+      if (!currentBarcodeData) return;
+      try {
+        btnSaveServer.disabled = true;
+        btnSaveServer.classList.add("opacity-50");
+        const payload = buildBarcodePayload();
+        payload.save_to_downloads = true;
+        const resp = await fetch("/api/tools/barcode/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+          showBarcodeAlert(`Đã lưu tệp ${data.filename} vào Kho Tệp Của Tôi!`);
+          loadFilesBadgeOnly();
+          populateBarcodeSystemFiles();
+        } else {
+          showBarcodeAlert(data.detail || "Lỗi lưu tệp");
+        }
+      } catch (err) {
+        showBarcodeAlert("Lỗi lưu tệp: " + err.message);
+      } finally {
+        btnSaveServer.disabled = false;
+        btnSaveServer.classList.remove("opacity-50");
+      }
+    });
+  }
+}
+
+function debouncedGenerateBarcode() {
+  clearTimeout(barcodeGenDebounceTimer);
+  barcodeGenDebounceTimer = setTimeout(() => {
+    triggerGenerateBarcode();
+  }, 350);
+}
+
+function buildBarcodePayload() {
+  const bcTypeSelect = document.getElementById("bc-gen-type");
+  const barcodeType = bcTypeSelect ? bcTypeSelect.value : "qrcode";
+  const fgColor = document.getElementById("bc-fg-color")?.value || "#000000";
+  const bgColor = document.getElementById("bc-bg-color")?.value || "#ffffff";
+  const scale = parseInt(document.getElementById("bc-scale")?.value || "5", 10);
+  const ecLevel = document.getElementById("bc-ec-level")?.value || "M";
+
+  let content = "";
+  if (barcodeType === "qrcode") {
+    if (currentBarcodeTemplate === "text") {
+      content = document.getElementById("bc-input-text")?.value.trim() || "";
+    } else if (currentBarcodeTemplate === "wifi") {
+      const ssid = document.getElementById("bc-wifi-ssid")?.value.trim() || "";
+      const pass = document.getElementById("bc-wifi-pass")?.value || "";
+      const auth = document.getElementById("bc-wifi-auth")?.value || "WPA";
+      const hidden = document.getElementById("bc-wifi-hidden")?.checked || false;
+      content = `WIFI:S:${ssid};T:${auth};P:${pass};${hidden ? "H:true;" : ""};`;
+    } else if (currentBarcodeTemplate === "contact") {
+      const name = document.getElementById("bc-contact-name")?.value.trim() || "";
+      const tel = document.getElementById("bc-contact-tel")?.value.trim() || "";
+      const email = document.getElementById("bc-contact-email")?.value.trim() || "";
+      const org = document.getElementById("bc-contact-org")?.value.trim() || "";
+      content = `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL:${tel}\nEMAIL:${email}\nORG:${org}\nEND:VCARD`;
+    } else if (currentBarcodeTemplate === "phone") {
+      const phone = document.getElementById("bc-phone-num")?.value.trim() || "";
+      content = `tel:${phone}`;
+    } else if (currentBarcodeTemplate === "email") {
+      const to = document.getElementById("bc-email-to")?.value.trim() || "";
+      const subject = document.getElementById("bc-email-subject")?.value.trim() || "";
+      content = `mailto:${to}${subject ? "?subject=" + encodeURIComponent(subject) : ""}`;
+    }
+  } else {
+    content = document.getElementById("bc-1d-content")?.value.trim() || "";
+  }
+
+  return {
+    content: content || "https://google.com",
+    barcode_type: barcodeType,
+    fg_color: fgColor,
+    bg_color: bgColor,
+    scale: scale,
+    ec_level: ecLevel,
+    show_text: true,
+    save_to_downloads: false
+  };
+}
+
+async function triggerGenerateBarcode() {
+  const previewImg = document.getElementById("bc-preview-img");
+  const placeholder = document.getElementById("bc-preview-placeholder");
+  const previewMeta = document.getElementById("bc-preview-meta");
+  if (!previewImg) return;
+
+  const payload = buildBarcodePayload();
+  if (!payload.content) return;
+
+  if (previewMeta) previewMeta.textContent = "Đang tạo mã...";
+
+  try {
+    const res = await fetch("/api/tools/barcode/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      currentBarcodeData = data;
+      previewImg.src = data.data_url;
+      previewImg.classList.remove("hidden");
+      if (placeholder) placeholder.classList.add("hidden");
+      if (previewMeta) {
+        previewMeta.textContent = `${data.format_name} • ${data.width}×${data.height}px`;
+        previewMeta.className = "px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-emerald-400 font-mono";
+      }
+    } else {
+      if (previewMeta) {
+        previewMeta.textContent = data.detail || "Lỗi định dạng";
+        previewMeta.className = "px-2 py-0.5 rounded-full text-[10px] bg-rose-500/20 text-rose-300 font-mono";
+      }
+    }
+  } catch (err) {
+    if (previewMeta) {
+      previewMeta.textContent = "Lỗi kết nối";
+      previewMeta.className = "px-2 py-0.5 rounded-full text-[10px] bg-rose-500/20 text-rose-300 font-mono";
+    }
+  }
+}
+
+// Scanner logic
+function setupBarcodeScannerEvents() {
+  const dropzone = document.getElementById("bc-dropzone");
+  const fileInput = document.getElementById("bc-file-input");
+  const selectSystemFile = document.getElementById("bc-select-system-file");
+  const btnOpenCam = document.getElementById("btn-bc-open-cam");
+  const btnCloseCam = document.getElementById("btn-bc-close-cam");
+
+  if (dropzone && fileInput) {
+    dropzone.addEventListener("click", () => fileInput.click());
+
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("border-emerald-500", "bg-emerald-950/20");
+    });
+    ["dragleave", "drop"].forEach(ev => {
+      dropzone.addEventListener(ev, () => {
+        dropzone.classList.remove("border-emerald-500", "bg-emerald-950/20");
+      });
+    });
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file.type.startsWith("image/")) {
+          decodeBarcodeFromFile(file);
+        } else {
+          showBarcodeAlert("Vui lòng thả tệp hình ảnh hợp lệ");
+        }
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files.length > 0) {
+        decodeBarcodeFromFile(fileInput.files[0]);
+      }
+    });
+  }
+
+  // System files dropdown change
+  if (selectSystemFile) {
+    selectSystemFile.addEventListener("change", () => {
+      const val = selectSystemFile.value;
+      if (val) {
+        decodeBarcodeFromTaskId(val);
+      }
+    });
+  }
+
+  // Global Clipboard Paste (Ctrl+V) listener
+  window.addEventListener("paste", (e) => {
+    if (!e.clipboardData || !e.clipboardData.items) return;
+    for (let i = 0; i < e.clipboardData.items.length; i++) {
+      const item = e.clipboardData.items[i];
+      if (item.type.indexOf("image") !== -1) {
+        const blob = item.getAsFile();
+        if (blob) {
+          switchTab("barcode");
+          const subtabScan = document.getElementById("subtab-bc-scan");
+          if (subtabScan) subtabScan.click();
+          decodeBarcodeFromFile(blob);
+          break;
+        }
+      }
+    }
+  });
+
+  // Camera
+  if (btnOpenCam) btnOpenCam.addEventListener("click", startWebcamScanner);
+  if (btnCloseCam) btnCloseCam.addEventListener("click", stopWebcamScanner);
+}
+
+async function populateBarcodeSystemFiles() {
+  const sel = document.getElementById("bc-select-system-file");
+  if (!sel) return;
+
+  try {
+    const res = await fetch("/api/files");
+    if (!res.ok) return;
+    const data = await res.json();
+    const tasks = data.tasks || [];
+    const imageTasks = tasks.filter(t => {
+      const name = (t.title || t.filename || "").toLowerCase();
+      return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp") || name.endsWith(".bmp");
+    });
+
+    sel.innerHTML = '<option value="">-- Chọn ảnh trong kho lưu trữ --</option>';
+    if (imageTasks.length === 0) {
+      sel.innerHTML += '<option value="" disabled>(Chưa có tệp ảnh trong kho)</option>';
+      return;
+    }
+
+    imageTasks.forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t.task_id;
+      opt.textContent = `${t.title || t.filename} (${t.size_mb || 0} MB)`;
+      sel.appendChild(opt);
+    });
+  } catch (err) {
+    console.warn("Lỗi tải danh sách ảnh hệ thống:", err);
+  }
+}
+
+async function decodeBarcodeFromFile(file) {
+  setBarcodeScanState("loading");
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/tools/barcode/decode-file", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      renderBarcodeResults(data);
+    } else {
+      showBarcodeScanError(data.detail || "Không thể đọc mã từ hình ảnh này.");
+    }
+  } catch (err) {
+    showBarcodeScanError("Lỗi kết nối máy chủ: " + err.message);
+  }
+}
+
+async function decodeBarcodeFromTaskId(taskId) {
+  setBarcodeScanState("loading");
+  try {
+    const res = await fetch("/api/tools/barcode/decode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: taskId })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      renderBarcodeResults(data);
+    } else {
+      showBarcodeScanError(data.detail || "Không đọc được mã từ tệp đã chọn.");
+    }
+  } catch (err) {
+    showBarcodeScanError("Lỗi đọc tệp: " + err.message);
+  }
+}
+
+function setBarcodeScanState(state) {
+  const emptyEl = document.getElementById("bc-scan-empty");
+  const loadingEl = document.getElementById("bc-scan-loading");
+  const resultsBox = document.getElementById("bc-scan-results-box");
+  const countBadge = document.getElementById("bc-scan-count-badge");
+
+  if (emptyEl) emptyEl.classList.add("hidden");
+  if (loadingEl) loadingEl.classList.add("hidden");
+  if (resultsBox) resultsBox.classList.add("hidden");
+  if (countBadge) countBadge.classList.add("hidden");
+
+  if (state === "loading") {
+    if (loadingEl) loadingEl.classList.remove("hidden");
+  } else if (state === "empty") {
+    if (emptyEl) emptyEl.classList.remove("hidden");
+  } else if (state === "results") {
+    if (resultsBox) resultsBox.classList.remove("hidden");
+    if (countBadge) countBadge.classList.remove("hidden");
+  }
+}
+
+function showBarcodeScanError(msg) {
+  setBarcodeScanState("empty");
+  const emptyEl = document.getElementById("bc-scan-empty");
+  if (emptyEl) {
+    emptyEl.innerHTML = `
+      <div class="space-y-2">
+        <svg class="w-10 h-10 mx-auto text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <p class="text-xs text-rose-300 font-semibold">${escapeHtml(msg)}</p>
+        <p class="text-[11px] text-slate-400">Hãy thử ảnh chụp rõ nét hơn hoặc có độ tương phản cao hơn.</p>
+      </div>
+    `;
+  }
+}
+
+function renderBarcodeResults(data) {
+  const resultsBox = document.getElementById("bc-scan-results-box");
+  const countBadge = document.getElementById("bc-scan-count-badge");
+  const annotatedImg = document.getElementById("bc-scan-annotated-img");
+  const imgDims = document.getElementById("bc-scan-img-dims");
+  const barcodesList = document.getElementById("bc-barcodes-list");
+
+  if (data.count === 0) {
+    showBarcodeScanError("Không phát hiện thấy mã Barcode hoặc QR Code nào trong ảnh.");
+    return;
+  }
+
+  setBarcodeScanState("results");
+
+  if (countBadge) {
+    countBadge.textContent = `${data.count} mã tìm thấy`;
+    countBadge.className = "px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-mono";
+  }
+
+  if (annotatedImg && data.annotated_image_url) {
+    annotatedImg.src = data.annotated_image_url;
+  }
+  if (imgDims) {
+    imgDims.textContent = `Kích thước ảnh gốc: ${data.image_width} × ${data.image_height} px`;
+  }
+
+  if (barcodesList) {
+    barcodesList.innerHTML = data.barcodes.map(b => {
+      const is2d = b.is_2d;
+      const typeBadgeClass = is2d ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-blue-500/20 text-blue-300 border-blue-500/30";
+      const parsed = b.parsed || {};
+      
+      let smartActionHtml = "";
+      if (parsed.type === "url") {
+        smartActionHtml = `
+          <a href="${escapeHtml(parsed.url)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-sm">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+            <span>Mở Liên Kết</span>
+          </a>
+        `;
+      } else if (parsed.type === "wifi") {
+        smartActionHtml = `
+          <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-xs text-slate-300">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Tên mạng (SSID):</span>
+              <span class="font-bold text-white">${escapeHtml(parsed.ssid || '(Trống)')}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 text-[11px]">Mật khẩu:</span>
+              <span class="font-mono text-emerald-400 font-bold">${escapeHtml(parsed.password || '(Không có)')}</span>
+            </div>
+            ${parsed.password ? `
+              <button type="button" onclick="copyToClipboard('${escapeHtml(parsed.password)}')" class="w-full mt-1 py-1 px-2.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer">
+                <span>Sao chép mật khẩu</span>
+              </button>
+            ` : ''}
+          </div>
+        `;
+      } else if (parsed.type === "contact") {
+        smartActionHtml = `
+          <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1 text-xs text-slate-300">
+            ${parsed.name ? `<div><span class="text-slate-400 text-[11px]">Họ tên:</span> <b class="text-white">${escapeHtml(parsed.name)}</b></div>` : ''}
+            ${parsed.tel ? `<div><span class="text-slate-400 text-[11px]">Điện thoại:</span> <a href="tel:${escapeHtml(parsed.tel)}" class="text-emerald-400">${escapeHtml(parsed.tel)}</a></div>` : ''}
+            ${parsed.email ? `<div><span class="text-slate-400 text-[11px]">Email:</span> <a href="mailto:${escapeHtml(parsed.email)}" class="text-sky-400">${escapeHtml(parsed.email)}</a></div>` : ''}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3 shadow-md">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-lg text-xs font-semibold border ${typeBadgeClass}">
+                ${escapeHtml(b.format)}
+              </span>
+              <span class="text-[11px] text-slate-400">${b.type_label} • #${b.index}</span>
+            </div>
+            <span class="text-[10px] text-slate-500 font-mono">${parsed.title || ''}</span>
+          </div>
+
+          <div class="relative group">
+            <pre class="w-full p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 font-mono text-xs whitespace-pre-wrap break-all select-all">${escapeHtml(b.text)}</pre>
+          </div>
+
+          ${smartActionHtml}
+
+          <div class="flex items-center gap-2 pt-1 border-t border-slate-800">
+            <button type="button" onclick="copyToClipboard('${escapeHtml(b.text)}')" class="py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition-all flex items-center gap-1.5 cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+              <span>Sao Chép</span>
+            </button>
+            <button type="button" onclick="loadContentIntoBarcodeGenerator('${escapeHtml(b.text)}', '${is2d ? 'qrcode' : b.format.toLowerCase()}')" class="py-1.5 px-3 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-700/40 text-emerald-300 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              <span>Tạo Lại Mã Này</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+}
+
+function loadContentIntoBarcodeGenerator(text, format) {
+  const subtabGen = document.getElementById("subtab-bc-gen");
+  if (subtabGen) subtabGen.click();
+
+  const bcTypeSelect = document.getElementById("bc-gen-type");
+  const bcInputText = document.getElementById("bc-input-text");
+  const bc1dContent = document.getElementById("bc-1d-content");
+
+  const is2d = format.includes("qr") || format.includes("matrix");
+  if (bcTypeSelect) {
+    if (is2d) {
+      bcTypeSelect.value = "qrcode";
+    } else {
+      let found = false;
+      for (let opt of bcTypeSelect.options) {
+        if (opt.value === format || format.includes(opt.value)) {
+          bcTypeSelect.value = opt.value;
+          found = true;
+          break;
+        }
+      }
+      if (!found) bcTypeSelect.value = "code128";
+    }
+    bcTypeSelect.dispatchEvent(new Event("change"));
+  }
+
+  if (is2d && bcInputText) {
+    bcInputText.value = text;
+  } else if (bc1dContent) {
+    bc1dContent.value = text;
+  }
+
+  triggerGenerateBarcode();
+}
+
+// Camera Scanner Implementation
+async function startWebcamScanner() {
+  const video = document.getElementById("bc-webcam-stream");
+  const box = document.getElementById("bc-webcam-box");
+  if (!video || !box) return;
+
+  try {
+    webcamMediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = webcamMediaStream;
+    box.classList.remove("hidden");
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    let isScanning = false;
+    webcamScanInterval = setInterval(async () => {
+      if (isScanning || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      isScanning = true;
+
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const frameDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+        const res = await fetch("/api/tools/barcode/decode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_base64: frameDataUrl })
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.count > 0) {
+          stopWebcamScanner();
+          renderBarcodeResults(data);
+        }
+      } catch (scanErr) {
+        // Continue scanning
+      } finally {
+        isScanning = false;
+      }
+    }, 900);
+  } catch (err) {
+    showBarcodeAlert("Không thể mở Camera: " + err.message);
+  }
+}
+
+function stopWebcamScanner() {
+  if (webcamScanInterval) {
+    clearInterval(webcamScanInterval);
+    webcamScanInterval = null;
+  }
+  if (webcamMediaStream) {
+    webcamMediaStream.getTracks().forEach(t => t.stop());
+    webcamMediaStream = null;
+  }
+  const box = document.getElementById("bc-webcam-box");
+  if (box) box.classList.add("hidden");
+}
 
 // Initial Boot Sequence
 document.addEventListener("DOMContentLoaded", () => {

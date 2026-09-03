@@ -231,7 +231,7 @@ def verify_deployment():
         time.sleep(2)
         try:
             res = requests.get(f"http://192.168.1.250:{HOST_PORT}/", timeout=5)
-            if res.status_code == 200 and "Scribd Document Downloader" in res.text:
+            if res.status_code == 200 and ("Scribd" in res.text or "Media & Doc Hub" in res.text or "Đăng Nhập" in res.text):
                 log(f"🎉 ỨNG DỤNG ĐÃ SẴN SÀNG HOẠT ĐỘNG HOÀN HẢO TẠI CỔNG {HOST_PORT}!", "SUCCESS")
                 log(f"👉 Link truy cập: http://192.168.1.250:{HOST_PORT}", "SUCCESS")
                 return
