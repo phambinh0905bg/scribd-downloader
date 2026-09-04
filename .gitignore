@@ -31,4 +31,6 @@ ENV/
 .vscode/
 .DS_Store
 Thumbs.db
-
+# Local DB & Data
+data/
+*.db

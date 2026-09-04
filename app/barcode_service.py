@@ -7,6 +7,8 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageOps, ImageEnhance
 import qrcode
 import qrcode.image.svg
+import qrcode.util
+from qrcode.exceptions import DataOverflowError
 import barcode
 from barcode.writer import ImageWriter, SVGWriter
 import zxingcpp
@@ -118,6 +120,21 @@ def parse_barcode_content(raw_text: str) -> Dict[str, Any]:
     }
 
 
+def get_qr_max_bytes(version: int, ec_level: str = "M") -> int:
+    """Calculate maximum data bytes for a given QR version and error correction level in Byte mode."""
+    if not (1 <= version <= 40):
+        return 0
+    ec_map = {"M": 0, "L": 1, "H": 2, "Q": 3}
+    ec_idx = ec_map.get(ec_level.upper(), 0)
+    try:
+        total_bits = qrcode.util.BIT_LIMIT_TABLE[ec_idx][version]
+        char_count_bits = 8 if version < 10 else 16
+        overhead_bits = 4 + char_count_bits
+        return max(0, (total_bits - overhead_bits) // 8)
+    except Exception:
+        return 0
+
+
 def generate_barcode(
     content: str,
     barcode_type: str = "qrcode",
@@ -125,7 +142,8 @@ def generate_barcode(
     bg_color: str = "#ffffff",
     ec_level: str = "M",
     scale: int = 4,
-    show_text: bool = True
+    show_text: bool = True,
+    qr_version: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Generate 1D barcode or 2D QR Code.
@@ -144,16 +162,46 @@ def generate_barcode(
             "Q": qrcode.constants.ERROR_CORRECT_Q,
             "H": qrcode.constants.ERROR_CORRECT_H
         }
-        error_correction = ec_map.get(ec_level.upper(), qrcode.constants.ERROR_CORRECT_M)
+        ec_level_clean = ec_level.upper() if ec_level else "M"
+        error_correction = ec_map.get(ec_level_clean, qrcode.constants.ERROR_CORRECT_M)
+
+        explicit_version = None
+        if qr_version is not None:
+            try:
+                v_int = int(qr_version)
+                if 1 <= v_int <= 40:
+                    explicit_version = v_int
+            except (ValueError, TypeError):
+                pass
 
         qr = qrcode.QRCode(
-            version=None,
+            version=explicit_version,
             error_correction=error_correction,
             box_size=max(2, min(scale * 3, 30)),
             border=2
         )
         qr.add_data(content)
-        qr.make(fit=True)
+
+        try:
+            if explicit_version is not None:
+                # Enforce selected QR version capacity strictly
+                qr.make(fit=False)
+            else:
+                # Auto-fit to the smallest suitable version
+                qr.make(fit=True)
+        except DataOverflowError:
+            # Calculate minimal version needed for user feedback
+            calc_qr = qrcode.QRCode(version=None, error_correction=error_correction)
+            calc_qr.add_data(content)
+            calc_qr.make(fit=True)
+            min_v = calc_qr.version
+            content_bytes = len(content.encode("utf-8"))
+            max_bytes = get_qr_max_bytes(explicit_version, ec_level_clean)
+            raise ValueError(
+                f"Nội dung ({content_bytes} bytes) vượt quá dung lượng tối đa của QR Code Version {explicit_version} "
+                f"(mức sửa lỗi {ec_level_clean}, tối đa {max_bytes} bytes). "
+                f"Vui lòng tăng lên tối thiểu Version {min_v} hoặc chọn 'Tự động'."
+            )
 
         # PNG Image
         pil_img = qr.make_image(fill_color=fg_color, back_color=bg_color).get_image()
@@ -177,11 +225,18 @@ def generate_barcode(
         except Exception as svg_err:
             logger.warning(f"Lỗi tạo SVG cho QR code: {svg_err}")
 
+        content_bytes = len(content.encode("utf-8"))
+        max_bytes = get_qr_max_bytes(qr.version, ec_level_clean)
+
         return {
             "success": True,
             "barcode_type": "qrcode",
-            "format_name": "QR Code",
+            "format_name": f"QR Code (v{qr.version})",
             "is_2d": True,
+            "qr_version": qr.version,
+            "qr_modules": f"{qr.modules_count}x{qr.modules_count}",
+            "content_bytes": content_bytes,
+            "max_capacity_bytes": max_bytes,
             "width": pil_img.width,
             "height": pil_img.height,
             "data_url": f"data:image/png;base64,{png_b64}",

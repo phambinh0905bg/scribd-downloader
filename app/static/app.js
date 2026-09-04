@@ -2229,13 +2229,183 @@ function copyToClipboard(text) {
   }
 }
 
+const QR_CAPACITY_TABLE = {
+  1: { L: 17, M: 14, Q: 11, H: 7, modules: "21×21" },
+  2: { L: 32, M: 26, Q: 20, H: 14, modules: "25×25" },
+  3: { L: 53, M: 42, Q: 32, H: 24, modules: "29×29" },
+  4: { L: 78, M: 62, Q: 46, H: 34, modules: "33×33" },
+  5: { L: 106, M: 84, Q: 60, H: 44, modules: "37×37" },
+  6: { L: 134, M: 106, Q: 74, H: 58, modules: "41×41" },
+  7: { L: 154, M: 122, Q: 86, H: 64, modules: "45×45" },
+  8: { L: 192, M: 152, Q: 108, H: 84, modules: "49×49" },
+  9: { L: 230, M: 180, Q: 130, H: 98, modules: "53×53" },
+  10: { L: 271, M: 213, Q: 151, H: 119, modules: "57×57" },
+  11: { L: 321, M: 251, Q: 177, H: 137, modules: "61×61" },
+  12: { L: 367, M: 287, Q: 203, H: 155, modules: "65×65" },
+  13: { L: 425, M: 331, Q: 241, H: 177, modules: "69×69" },
+  14: { L: 458, M: 362, Q: 258, H: 194, modules: "73×73" },
+  15: { L: 520, M: 412, Q: 292, H: 220, modules: "77×77" },
+  16: { L: 586, M: 450, Q: 322, H: 250, modules: "81×81" },
+  17: { L: 644, M: 504, Q: 364, H: 280, modules: "85×85" },
+  18: { L: 718, M: 560, Q: 394, H: 310, modules: "89×89" },
+  19: { L: 792, M: 624, Q: 442, H: 338, modules: "93×93" },
+  20: { L: 858, M: 666, Q: 482, H: 382, modules: "97×97" },
+  21: { L: 929, M: 711, Q: 509, H: 403, modules: "101×101" },
+  22: { L: 1003, M: 779, Q: 565, H: 439, modules: "105×105" },
+  23: { L: 1091, M: 857, Q: 611, H: 461, modules: "109×109" },
+  24: { L: 1171, M: 911, Q: 661, H: 511, modules: "113×113" },
+  25: { L: 1273, M: 997, Q: 715, H: 535, modules: "117×117" },
+  26: { L: 1367, M: 1059, Q: 751, H: 593, modules: "121×121" },
+  27: { L: 1465, M: 1125, Q: 805, H: 625, modules: "125×125" },
+  28: { L: 1528, M: 1190, Q: 868, H: 658, modules: "129×129" },
+  29: { L: 1628, M: 1264, Q: 908, H: 698, modules: "133×133" },
+  30: { L: 1732, M: 1370, Q: 982, H: 742, modules: "137×137" },
+  31: { L: 1840, M: 1452, Q: 1038, H: 790, modules: "141×141" },
+  32: { L: 1952, M: 1538, Q: 1128, H: 842, modules: "145×145" },
+  33: { L: 2068, M: 1628, Q: 1198, H: 898, modules: "149×149" },
+  34: { L: 2188, M: 1722, Q: 1262, H: 958, modules: "153×153" },
+  35: { L: 2303, M: 1809, Q: 1322, H: 983, modules: "157×157" },
+  36: { L: 2431, M: 1911, Q: 1407, H: 1051, modules: "161×161" },
+  37: { L: 2563, M: 1989, Q: 1458, H: 1095, modules: "165×165" },
+  38: { L: 2699, M: 2099, Q: 1530, H: 1147, modules: "169×169" },
+  39: { L: 2809, M: 2213, Q: 1627, H: 1221, modules: "173×173" },
+  40: { L: 2953, M: 2331, Q: 1663, H: 1273, modules: "177×177" }
+};
+
+function populateQrVersionOptions(preserveSelected = true) {
+  const versionSelect = document.getElementById("bc-qr-version");
+  const ecLevelSelect = document.getElementById("bc-ec-level");
+  if (!versionSelect) return;
+
+  const currentVal = preserveSelected ? versionSelect.value : "0";
+  const ec = ecLevelSelect ? ecLevelSelect.value : "M";
+
+  let html = '<option value="0">Tự động (Khuyên dùng - Tối ưu)</option>';
+  for (let v = 1; v <= 40; v++) {
+    const info = QR_CAPACITY_TABLE[v];
+    const maxB = info ? info[ec] : 0;
+    const mod = info ? info.modules : "";
+    html += `<option value="${v}">Version ${v} (${mod}) • Max ${maxB}B</option>`;
+  }
+  versionSelect.innerHTML = html;
+  versionSelect.value = currentVal || "0";
+}
+
+function getQrRawContent() {
+  if (currentBarcodeTemplate === "text") {
+    return document.getElementById("bc-input-text")?.value.trim() || "";
+  } else if (currentBarcodeTemplate === "wifi") {
+    const ssid = document.getElementById("bc-wifi-ssid")?.value.trim() || "";
+    const pass = document.getElementById("bc-wifi-pass")?.value || "";
+    const auth = document.getElementById("bc-wifi-auth")?.value || "WPA";
+    const hidden = document.getElementById("bc-wifi-hidden")?.checked || false;
+    return `WIFI:S:${ssid};T:${auth};P:${pass};${hidden ? "H:true;" : ""};`;
+  } else if (currentBarcodeTemplate === "contact") {
+    const name = document.getElementById("bc-contact-name")?.value.trim() || "";
+    const tel = document.getElementById("bc-contact-tel")?.value.trim() || "";
+    const email = document.getElementById("bc-contact-email")?.value.trim() || "";
+    const org = document.getElementById("bc-contact-org")?.value.trim() || "";
+    return `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL:${tel}\nEMAIL:${email}\nORG:${org}\nEND:VCARD`;
+  } else if (currentBarcodeTemplate === "phone") {
+    const phone = document.getElementById("bc-phone-num")?.value.trim() || "";
+    return `tel:${phone}`;
+  } else if (currentBarcodeTemplate === "email") {
+    const to = document.getElementById("bc-email-to")?.value.trim() || "";
+    const subject = document.getElementById("bc-email-subject")?.value.trim() || "";
+    return `mailto:${to}${subject ? "?subject=" + encodeURIComponent(subject) : ""}`;
+  }
+  return "";
+}
+
+function updateQrCapacityValidation() {
+  const bcTypeSelect = document.getElementById("bc-gen-type");
+  if (bcTypeSelect && bcTypeSelect.value !== "qrcode") return true;
+
+  const indicator = document.getElementById("bc-capacity-indicator");
+  const icon = document.getElementById("bc-capacity-icon");
+  const textEl = document.getElementById("bc-capacity-text");
+  const actionsEl = document.getElementById("bc-capacity-actions");
+  const btnUpgrade = document.getElementById("bc-btn-upgrade-version");
+  const versionSelect = document.getElementById("bc-qr-version");
+  const ecLevelSelect = document.getElementById("bc-ec-level");
+
+  if (!indicator || !textEl) return true;
+
+  const content = getQrRawContent() || "https://scribd.binh.name.vn/";
+  const contentBytes = new TextEncoder().encode(content).length;
+  const ec = ecLevelSelect ? ecLevelSelect.value : "M";
+  const selectedVersion = parseInt(versionSelect ? versionSelect.value : "0", 10) || 0;
+
+  // Calculate minimal required version for current content
+  let minRequiredVersion = 40;
+  for (let v = 1; v <= 40; v++) {
+    if (QR_CAPACITY_TABLE[v] && QR_CAPACITY_TABLE[v][ec] >= contentBytes) {
+      minRequiredVersion = v;
+      break;
+    }
+  }
+
+  if (selectedVersion === 0) {
+    // Auto Mode
+    indicator.className = "p-2.5 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2 bg-slate-950/60 border border-slate-800 transition-all";
+    if (icon) icon.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+    const minInfo = QR_CAPACITY_TABLE[minRequiredVersion];
+    textEl.innerHTML = `Dung lượng: <span class="font-bold text-emerald-400 font-mono">${contentBytes}</span> bytes • Tự động chọn: <span class="font-bold text-white font-mono">Version ${minRequiredVersion}</span> (${minInfo?.modules || "21×21"}, tối đa ${minInfo ? minInfo[ec] : ""}B)`;
+    if (actionsEl) actionsEl.classList.add("hidden");
+    return true;
+  }
+
+  const currentInfo = QR_CAPACITY_TABLE[selectedVersion];
+  const maxBytes = currentInfo ? currentInfo[ec] : 0;
+
+  if (contentBytes > maxBytes) {
+    // Overflow!
+    indicator.className = "p-2.5 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2 bg-rose-500/15 border border-rose-500/40 text-rose-200 transition-all shadow-sm";
+    if (icon) icon.innerHTML = `<svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>`;
+    textEl.innerHTML = `<span class="font-semibold text-rose-300">Quá tải dung lượng:</span> <span class="font-bold text-rose-400 font-mono">${contentBytes}</span> / <span class="font-mono">${maxBytes}</span> bytes (Version ${selectedVersion}). Cần tối thiểu <span class="font-bold text-emerald-400 font-mono">Version ${minRequiredVersion}</span>!`;
+    
+    if (actionsEl) {
+      actionsEl.classList.remove("hidden");
+      if (btnUpgrade) {
+        btnUpgrade.textContent = `Nâng lên V${minRequiredVersion}`;
+        btnUpgrade.onclick = () => {
+          if (versionSelect) versionSelect.value = String(minRequiredVersion);
+          updateQrCapacityValidation();
+          triggerGenerateBarcode();
+        };
+      }
+      const btnAuto = document.getElementById("bc-btn-auto-version");
+      if (btnAuto) {
+        btnAuto.onclick = () => {
+          if (versionSelect) versionSelect.value = "0";
+          updateQrCapacityValidation();
+          triggerGenerateBarcode();
+        };
+      }
+    }
+    return false;
+  } else {
+    // Within limits
+    const percent = Math.round((contentBytes / maxBytes) * 100);
+    const isClose = percent >= 85;
+    const badgeColor = isClose ? "text-amber-400" : "text-emerald-400";
+    indicator.className = "p-2.5 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2 bg-slate-950/60 border border-slate-800 transition-all";
+    if (icon) icon.innerHTML = `<svg class="w-4 h-4 ${badgeColor}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+    textEl.innerHTML = `Dung lượng: <span class="font-bold ${badgeColor} font-mono">${contentBytes}</span> / <span class="font-mono">${maxBytes}</span> bytes (${percent}%) • <span class="font-bold text-white font-mono">Version ${selectedVersion}</span> (${currentInfo.modules})`;
+    if (actionsEl) actionsEl.classList.add("hidden");
+    return true;
+  }
+}
+
 function initBarcodeView() {
   if (!barcodeViewInitialized) {
+    populateQrVersionOptions();
     setupBarcodeGeneratorEvents();
     setupBarcodeScannerEvents();
     barcodeViewInitialized = true;
   }
   populateBarcodeSystemFiles();
+  updateQrCapacityValidation();
   if (!currentBarcodeData) {
     triggerGenerateBarcode();
   }
@@ -2274,6 +2444,8 @@ function setupBarcodeGeneratorEvents() {
   const qrTemplatesContainer = document.getElementById("bc-qr-templates-container");
   const bc1dInputContainer = document.getElementById("bc-1d-input-container");
   const bcEcContainer = document.getElementById("bc-ec-container");
+  const bcVersionContainer = document.getElementById("bc-version-container");
+  const bcCapacityIndicator = document.getElementById("bc-capacity-indicator");
   const bc1dHint = document.getElementById("bc-1d-hint");
   const bc1dContent = document.getElementById("bc-1d-content");
 
@@ -2284,10 +2456,15 @@ function setupBarcodeGeneratorEvents() {
         if (qrTemplatesContainer) qrTemplatesContainer.classList.remove("hidden");
         if (bc1dInputContainer) bc1dInputContainer.classList.add("hidden");
         if (bcEcContainer) bcEcContainer.classList.remove("hidden");
+        if (bcVersionContainer) bcVersionContainer.classList.remove("hidden");
+        if (bcCapacityIndicator) bcCapacityIndicator.classList.remove("hidden");
+        updateQrCapacityValidation();
       } else {
         if (qrTemplatesContainer) qrTemplatesContainer.classList.add("hidden");
         if (bc1dInputContainer) bc1dInputContainer.classList.remove("hidden");
         if (bcEcContainer) bcEcContainer.classList.add("hidden");
+        if (bcVersionContainer) bcVersionContainer.classList.add("hidden");
+        if (bcCapacityIndicator) bcCapacityIndicator.classList.add("hidden");
         
         // Update placeholder & hint
         if (bcTypeSelect.value === "ean13") {
@@ -2327,6 +2504,7 @@ function setupBarcodeGeneratorEvents() {
           else fieldEl.classList.add("hidden");
         }
       });
+      updateQrCapacityValidation();
       triggerGenerateBarcode();
     });
   });
@@ -2350,20 +2528,44 @@ function setupBarcodeGeneratorEvents() {
     });
   }
 
+  // EC Level sync with Version labels & capacity
+  const bcEcSelect = document.getElementById("bc-ec-level");
+  if (bcEcSelect) {
+    bcEcSelect.addEventListener("change", () => {
+      populateQrVersionOptions(true);
+      updateQrCapacityValidation();
+      triggerGenerateBarcode();
+    });
+  }
+
+  // QR Version select
+  const bcVersionSelect = document.getElementById("bc-qr-version");
+  if (bcVersionSelect) {
+    bcVersionSelect.addEventListener("change", () => {
+      updateQrCapacityValidation();
+      triggerGenerateBarcode();
+    });
+  }
+
   // Other controls
-  ["bc-scale", "bc-ec-level", "bc-wifi-auth", "bc-wifi-hidden"].forEach(id => {
+  ["bc-scale", "bc-wifi-auth", "bc-wifi-hidden"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", () => triggerGenerateBarcode());
   });
 
-  // Inputs real-time debounced trigger
+  // Inputs real-time debounced trigger & live capacity validation
   [
     "bc-input-text", "bc-1d-content", "bc-wifi-ssid", "bc-wifi-pass",
     "bc-contact-name", "bc-contact-tel", "bc-contact-email", "bc-contact-org",
     "bc-phone-num", "bc-email-to", "bc-email-subject"
   ].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.addEventListener("input", () => debouncedGenerateBarcode());
+    if (el) {
+      el.addEventListener("input", () => {
+        updateQrCapacityValidation();
+        debouncedGenerateBarcode();
+      });
+    }
   });
 
   // Generate button
@@ -2507,6 +2709,8 @@ function buildBarcodePayload() {
     content = document.getElementById("bc-1d-content")?.value.trim() || "";
   }
 
+  const qrVersionVal = parseInt(document.getElementById("bc-qr-version")?.value || "0", 10);
+
   let fallbackDefault = "https://scribd.binh.name.vn/";
   if (barcodeType === "ean13") fallbackDefault = "893456789012";
   else if (barcodeType === "ean8") fallbackDefault = "9638507";
@@ -2520,6 +2724,7 @@ function buildBarcodePayload() {
     bg_color: bgColor,
     scale: scale,
     ec_level: ecLevel,
+    qr_version: (barcodeType === "qrcode" && qrVersionVal > 0) ? qrVersionVal : null,
     show_text: true,
     save_to_downloads: false
   };
@@ -2549,7 +2754,11 @@ async function triggerGenerateBarcode() {
       previewImg.classList.remove("hidden");
       if (placeholder) placeholder.classList.add("hidden");
       if (previewMeta) {
-        previewMeta.textContent = `${data.format_name} • ${data.width}×${data.height}px`;
+        if (data.qr_version) {
+          previewMeta.textContent = `${data.format_name} (${data.qr_modules}) • ${data.content_bytes}B • ${data.width}×${data.height}px`;
+        } else {
+          previewMeta.textContent = `${data.format_name} • ${data.width}×${data.height}px`;
+        }
         previewMeta.className = "px-2 py-0.5 rounded-full text-[10px] bg-slate-800 text-emerald-400 font-mono";
       }
     } else {

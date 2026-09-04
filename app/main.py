@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, Response, HTTPException, BackgroundTasks, 
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.auth import create_access_token, verify_access_token, authenticate_user, get_current_user
@@ -171,6 +171,7 @@ class BarcodeGenerateRequest(BaseModel):
     scale: int = 4
     show_text: bool = True
     save_to_downloads: bool = False
+    qr_version: Optional[int] = Field(None, ge=1, le=40, description="QR version (1-40) or None for auto")
 
 
 class BarcodeDecodePayload(BaseModel):
@@ -905,7 +906,8 @@ async def api_generate_barcode(req: BarcodeGenerateRequest):
             bg_color=req.bg_color,
             ec_level=req.ec_level,
             scale=req.scale,
-            show_text=req.show_text
+            show_text=req.show_text,
+            qr_version=req.qr_version
         )
 
         # Optionally save to user's downloads library

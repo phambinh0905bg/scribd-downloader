@@ -139,8 +139,9 @@ def push_image_to_ghcr():
                     p_prog = msg_obj.get("progress", "")
                     log(f"[Push] {p_id} {msg_obj['status']} {p_prog}".strip())
                 elif "error" in msg_obj:
-                    log(f"❌ [Push Error] {msg_obj['error']}", "ERROR")
-                    sys.exit(1)
+                    log(f"⚠️ [Push Warning] {msg_obj['error']}", "WARN")
+                    log("⚠️ Không thể push lên GHCR (có thể do mạng chập chờn), nhưng image đã được build thành công trực tiếp trên máy chủ. Tiếp tục deploy image local!", "WARN")
+                    return
             except Exception:
                 pass
                 
