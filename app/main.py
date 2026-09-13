@@ -142,6 +142,17 @@ class DirectDownloadRequest(BaseModel):
     custom_filename: Optional[str] = None
 
 
+class GDriveScanRequest(BaseModel):
+    url: str
+    api_key: Optional[str] = None
+    max_depth: Optional[int] = 10
+
+
+class GDriveExportRequest(BaseModel):
+    urls: List[str]
+    filename: Optional[str] = "idm_links.txt"
+
+
 class TelegramConfigRequest(BaseModel):
     bot_token: str
     chat_id: str
@@ -424,6 +435,60 @@ async def start_direct_file_download(req: DirectDownloadRequest, request: Reques
         "task_id": task_id,
         "message": "Đã khởi tạo tác vụ tải tệp tin từ xa."
     }
+
+
+# --- GOOGLE DRIVE ENDPOINTS ---
+
+@app.post("/api/gdrive/scan")
+async def scan_gdrive_endpoint(req: GDriveScanRequest, request: Request):
+    enforce_rbac_and_abac(request, "download:direct", service="gdrive", resource_url=req.url)
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập đường dẫn Google Drive.")
+    
+    from app.gdrive_service import gdrive_service
+    try:
+        data = await asyncio.to_thread(
+            gdrive_service.scan_url,
+            url=url,
+            api_key=req.api_key,
+            max_depth=req.max_depth or 10
+        )
+        return {"status": "success", "data": data}
+    except Exception as e:
+        logger.error(f"Lỗi quét Google Drive: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/gdrive/export-txt")
+async def export_gdrive_txt(req: GDriveExportRequest):
+    if not req.urls:
+        raise HTTPException(status_code=400, detail="Danh sách URL trống.")
+    content = "\r\n".join(req.urls) + "\r\n"
+    fn = req.filename or "gdrive_idm_links.txt"
+    return Response(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'}
+    )
+
+
+@app.post("/api/gdrive/export-ef2")
+async def export_gdrive_ef2(req: GDriveExportRequest):
+    if not req.urls:
+        raise HTTPException(status_code=400, detail="Danh sách URL trống.")
+    lines = []
+    for u in req.urls:
+        u_clean = u.strip()
+        if u_clean:
+            lines.append(f"<\r\n{u_clean}\r\n>")
+    content = "\r\n".join(lines) + "\r\n"
+    fn = "gdrive_idm_links.ef2"
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'}
+    )
 
 
 # --- UNIVERSAL STATUS & STREAMING ---

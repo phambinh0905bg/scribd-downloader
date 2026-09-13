@@ -118,6 +118,13 @@
           <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
           <span>Remote URL (Direct)</span>
         </button>
+
+        <button id="tab-gdrive" class="nav-tab-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-all cursor-pointer">
+          <svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M7.71 3.5L1.15 15l3.43 6 6.55-11.5L7.71 3.5zm3.43 0l6.56 11.5h6.86L18 3.5h-6.86zm-2.28 12.5l-3.43 6h13.72l3.43-6H8.86z"/>
+          </svg>
+          <span>Google Drive (IDM)</span>
+        </button>
       </div>
 
       <!-- Group 2: QUẢN LÝ & CÔNG CỤ -->
@@ -632,6 +639,227 @@
             <span>Bắt Đầu Tải Tệp Về Máy Chủ</span>
           </button>
         </form>
+      </div>
+    </div>
+
+
+    <!-- ==================== VIEW: GOOGLE DRIVE IDM EXTRACTOR ==================== -->
+    <div id="view-gdrive" class="space-y-8 hidden">
+      <div class="text-center space-y-3 pt-2">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M7.71 3.5L1.15 15l3.43 6 6.55-11.5L7.71 3.5zm3.43 0l6.56 11.5h6.86L18 3.5h-6.86zm-2.28 12.5l-3.43 6h13.72l3.43-6H8.86z"/>
+          </svg>
+          Hỗ trợ quét thư mục đa cấp (Nested Subfolders) & Tệp tin Google Drive
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+          Trích Xuất Link <span class="bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-400 bg-clip-text text-transparent">Google Drive Cho IDM</span>
+        </h2>
+        <p class="text-slate-400 max-w-2xl mx-auto text-sm sm:text-base">
+          Nhập đường dẫn Thư mục hoặc Tệp tin Google Drive bất kỳ. Hệ thống sẽ tự động quét toàn bộ thư mục lồng nhau và tạo danh sách link tải trực tiếp tốc độ cao để dán thẳng vào Internet Download Manager (IDM).
+        </p>
+      </div>
+
+      <!-- Input Form Card -->
+      <div class="glass-panel rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden space-y-6">
+        <form id="gdrive-form" class="space-y-5">
+          <div class="space-y-2">
+            <label for="gdrive-url-input" class="block text-sm font-semibold text-slate-200">
+              Đường dẫn Thư mục hoặc Tệp Google Drive <span class="text-amber-400">*</span>
+            </label>
+            <div class="relative flex items-center">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M7.71 3.5L1.15 15l3.43 6 6.55-11.5L7.71 3.5zm3.43 0l6.56 11.5h6.86L18 3.5h-6.86zm-2.28 12.5l-3.43 6h13.72l3.43-6H8.86z"/>
+                </svg>
+              </div>
+              <input 
+                type="url" 
+                id="gdrive-url-input" 
+                required 
+                placeholder="https://drive.google.com/drive/folders/... hoặc https://drive.google.com/file/d/..." 
+                class="w-full pl-11 pr-24 py-3.5 bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all shadow-inner text-sm sm:text-base"
+              >
+              <div class="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
+                <button type="button" id="btn-gdrive-paste" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs flex items-center gap-1 font-medium cursor-pointer">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                  </svg>
+                  <span class="hidden sm:inline">Dán</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Advanced Accordion Toggle -->
+          <div>
+            <button type="button" id="btn-gdrive-advanced-toggle" class="text-xs text-slate-400 hover:text-amber-400 flex items-center gap-1.5 transition-colors cursor-pointer font-medium">
+              <svg id="gdrive-advanced-icon" class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              <span>Tùy chọn nâng cao (Độ sâu thư mục & API Key)</span>
+            </button>
+            <div id="gdrive-advanced-panel" class="hidden mt-3 p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                  <label for="gdrive-max-depth" class="block text-xs font-semibold text-slate-300">
+                    Độ sâu quét thư mục con (Max Nested Depth)
+                  </label>
+                  <input 
+                    type="number" 
+                    id="gdrive-max-depth" 
+                    value="10" 
+                    min="1" 
+                    max="30" 
+                    class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-xs focus:ring-1 focus:ring-amber-500 outline-none"
+                  >
+                  <p class="text-[11px] text-slate-400">Mặc định quét sâu tối đa 10 tầng thư mục con lồng nhau.</p>
+                </div>
+                <div class="space-y-1.5">
+                  <label for="gdrive-api-key" class="block text-xs font-semibold text-slate-300">
+                    Google Drive API Key (Không bắt buộc)
+                  </label>
+                  <input 
+                    type="text" 
+                    id="gdrive-api-key" 
+                    placeholder="AIzaSy..." 
+                    class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-xs focus:ring-1 focus:ring-amber-500 outline-none font-mono"
+                  >
+                  <p class="text-[11px] text-slate-400">Hệ thống quét tự động không cần key. Chỉ điền nếu thư mục cực lớn.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button 
+            type="submit" 
+            id="btn-gdrive-submit" 
+            class="w-full py-4 px-6 rounded-xl font-bold text-white bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-500 active:scale-[0.99] transition-all shadow-lg shadow-amber-600/25 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <svg id="icon-gdrive-submit" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+            <svg id="spinner-gdrive" class="w-5 h-5 animate-spin hidden text-white" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <span id="btn-gdrive-text">Bắt Đầu Quét & Lấy Link IDM</span>
+          </button>
+        </form>
+
+        <!-- IDM Usage Quick Tips Banner -->
+        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300/90 space-y-1.5">
+          <div class="font-bold flex items-center gap-2 text-amber-300">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span>Cách tải nhanh bằng IDM (Internet Download Manager):</span>
+          </div>
+          <p class="text-slate-300">
+            <strong>Cách 1:</strong> Bấm nút <strong>"📋 Sao Chép Tất Cả (IDM)"</strong> bên dưới &rarr; Mở IDM &rarr; Chọn <strong>Tasks (Tác vụ)</strong> &rarr; <strong>Add batch download from clipboard (Thêm gói tải từ bộ nhớ tạm)</strong> &rarr; Chọn tất cả &rarr; Bắt đầu tải!
+          </p>
+          <p class="text-slate-300">
+            <strong>Cách 2:</strong> Bấm nút <strong>"📥 Xuất File .TXT"</strong> &rarr; Mở IDM &rarr; Chọn <strong>Tasks</strong> &rarr; <strong>Import</strong> &rarr; <strong>From text file</strong>.
+          </p>
+        </div>
+      </div>
+
+      <!-- Result Card -->
+      <div id="gdrive-result-card" class="hidden space-y-4">
+        <!-- Stats and Actions Header -->
+        <div class="glass-panel rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div class="space-y-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 uppercase">Kết Quả Quét</span>
+              <h3 id="gdrive-res-folder-name" class="font-bold text-base sm:text-lg text-white truncate">Tên Thư Mục</h3>
+            </div>
+            <p class="text-xs text-slate-400 flex items-center gap-3">
+              <span>Tổng cộng: <strong id="gdrive-res-total-files" class="text-amber-400 font-mono">0</strong> tệp tin</span>
+              <span>•</span>
+              <span>Đã quét: <strong id="gdrive-res-total-folders" class="text-slate-200 font-mono">0</strong> thư mục con</span>
+            </p>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <a 
+              id="btn-gdrive-download-direct" 
+              href="#" 
+              target="_blank" 
+              download 
+              class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              </svg>
+              <span id="btn-gdrive-download-text">Tải Trực Tiếp File Về Máy</span>
+            </a>
+
+            <button 
+              type="button" 
+              id="btn-gdrive-copy-all" 
+              class="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold transition-all shadow-md shadow-amber-600/20 flex items-center gap-2 cursor-pointer"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+              </svg>
+              <span id="btn-gdrive-copy-text">Sao Chép Tất Cả (IDM)</span>
+            </button>
+
+            <button 
+              type="button" 
+              id="btn-gdrive-export-txt" 
+              class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold transition-all border border-slate-700 flex items-center gap-2 cursor-pointer"
+            >
+              <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              <span>Xuất File .TXT</span>
+            </button>
+
+            <button 
+              type="button" 
+              id="btn-gdrive-export-ef2" 
+              class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold transition-all border border-slate-700 flex items-center gap-2 cursor-pointer"
+            >
+              <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              </svg>
+              <span>File .EF2</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter / Search bar -->
+        <div class="flex items-center justify-between gap-3 px-2">
+          <div class="relative flex-1 max-w-md">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+            <input 
+              type="text" 
+              id="gdrive-filter-input" 
+              placeholder="Lọc tệp theo tên hoặc thư mục..." 
+              class="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            >
+          </div>
+          <span id="gdrive-shown-count" class="text-xs text-slate-400 font-mono">Hiển thị: 0</span>
+        </div>
+
+        <!-- Table of files -->
+        <div class="glass-panel rounded-2xl overflow-hidden shadow-xl border border-slate-800">
+          <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead class="bg-slate-900/90 sticky top-0 z-10 border-b border-slate-800 text-slate-400">
+                <tr>
+                  <th class="py-3 px-4 w-12 text-center">#</th>
+                  <th class="py-3 px-4">Tên Tệp Tin</th>
+                  <th class="py-3 px-4 hidden md:table-cell">Đường Dẫn Thư Mục (Nested Path)</th>
+                  <th class="py-3 px-4 text-right">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="gdrive-files-tbody" class="divide-y divide-slate-800/60 text-slate-300">
+                <!-- Dynamic File Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 

@@ -10,6 +10,7 @@ const tabScribd = document.getElementById("tab-scribd");
 const tabYouTube = document.getElementById("tab-youtube");
 const tabFacebook = document.getElementById("tab-facebook");
 const tabDirect = document.getElementById("tab-direct");
+const tabGDrive = document.getElementById("tab-gdrive");
 const tabFiles = document.getElementById("tab-files");
 const tabTools = document.getElementById("tab-tools");
 const tabBarcode = document.getElementById("tab-barcode");
@@ -26,6 +27,7 @@ const viewScribd = document.getElementById("view-scribd");
 const viewYouTube = document.getElementById("view-youtube");
 const viewFacebook = document.getElementById("view-facebook");
 const viewDirect = document.getElementById("view-direct");
+const viewGDrive = document.getElementById("view-gdrive");
 const viewFiles = document.getElementById("view-files");
 const viewTools = document.getElementById("view-tools");
 const viewBarcode = document.getElementById("view-barcode");
@@ -80,6 +82,33 @@ const directPreviewCard = document.getElementById("direct-preview-card");
 const directPreviewFilename = document.getElementById("direct-preview-filename");
 const directPreviewSize = document.getElementById("direct-preview-size");
 const directPreviewType = document.getElementById("direct-preview-type");
+
+// Google Drive Elements
+const gdriveForm = document.getElementById("gdrive-form");
+const gdriveUrlInput = document.getElementById("gdrive-url-input");
+const btnGdriveSubmit = document.getElementById("btn-gdrive-submit");
+const btnGdriveText = document.getElementById("btn-gdrive-text");
+const spinnerGdrive = document.getElementById("spinner-gdrive");
+const iconGdriveSubmit = document.getElementById("icon-gdrive-submit");
+const btnGdrivePaste = document.getElementById("btn-gdrive-paste");
+const btnGdriveAdvancedToggle = document.getElementById("btn-gdrive-advanced-toggle");
+const gdriveAdvancedPanel = document.getElementById("gdrive-advanced-panel");
+const gdriveAdvancedIcon = document.getElementById("gdrive-advanced-icon");
+const gdriveMaxDepth = document.getElementById("gdrive-max-depth");
+const gdriveApiKey = document.getElementById("gdrive-api-key");
+const gdriveResultCard = document.getElementById("gdrive-result-card");
+const gdriveResFolderName = document.getElementById("gdrive-res-folder-name");
+const gdriveResTotalFiles = document.getElementById("gdrive-res-total-files");
+const gdriveResTotalFolders = document.getElementById("gdrive-res-total-folders");
+const btnGdriveDownloadDirect = document.getElementById("btn-gdrive-download-direct");
+const btnGdriveDownloadText = document.getElementById("btn-gdrive-download-text");
+const btnGdriveCopyAll = document.getElementById("btn-gdrive-copy-all");
+const btnGdriveCopyText = document.getElementById("btn-gdrive-copy-text");
+const btnGdriveExportTxt = document.getElementById("btn-gdrive-export-txt");
+const btnGdriveExportEf2 = document.getElementById("btn-gdrive-export-ef2");
+const gdriveFilterInput = document.getElementById("gdrive-filter-input");
+const gdriveShownCount = document.getElementById("gdrive-shown-count");
+const gdriveFilesTbody = document.getElementById("gdrive-files-tbody");
 
 // Progress UI Elements
 const docTitleDisplay = document.getElementById("doc-title-display");
@@ -146,7 +175,7 @@ function switchTab(tab) {
   }
 
   // Reset tab button styles (Desktop & Mobile)
-  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabFiles, tabTools, tabBarcode, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
+  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabGDrive, tabFiles, tabTools, tabBarcode, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
@@ -158,6 +187,7 @@ function switchTab(tab) {
   viewYouTube.classList.add("hidden");
   if (viewFacebook) viewFacebook.classList.add("hidden");
   if (viewDirect) viewDirect.classList.add("hidden");
+  if (viewGDrive) viewGDrive.classList.add("hidden");
   if (viewFiles) viewFiles.classList.add("hidden");
   if (viewTools) viewTools.classList.add("hidden");
   if (viewBarcode) viewBarcode.classList.add("hidden");
@@ -187,6 +217,10 @@ function switchTab(tab) {
     if (viewDirect) viewDirect.classList.remove("hidden");
     step3Label.innerText = "Tải Stream Tệp";
     directUrlInput.focus();
+  } else if (tab === "gdrive") {
+    if (tabGDrive) { tabGDrive.classList.add("active"); tabGDrive.classList.remove("text-slate-400"); }
+    if (viewGDrive) viewGDrive.classList.remove("hidden");
+    if (gdriveUrlInput) gdriveUrlInput.focus();
   } else if (tab === "files") {
     if (tabFiles) { tabFiles.classList.add("active"); tabFiles.classList.remove("text-slate-400"); }
     if (tabFilesM) { tabFilesM.classList.add("active"); tabFilesM.classList.remove("text-slate-400"); }
@@ -212,10 +246,12 @@ if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
 if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
 if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
+if (tabGDrive) tabGDrive.addEventListener("click", () => switchTab("gdrive"));
 if (tabFiles) tabFiles.addEventListener("click", () => switchTab("files"));
 if (tabTools) tabTools.addEventListener("click", () => switchTab("tools"));
 if (tabBarcode) tabBarcode.addEventListener("click", () => switchTab("barcode"));
 if (tabAdmin) tabAdmin.addEventListener("click", () => switchTab("admin"));
+
 
 if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
 if (tabYouTubeM) tabYouTubeM.addEventListener("click", () => switchTab("youtube"));
@@ -1786,6 +1822,12 @@ function handleUrlParamsOnLoad() {
       fbUrlInput.value = cleanUrl;
       fbUrlInput.dispatchEvent(new Event("input"));
     }
+  } else if (cleanUrl.includes("drive.google.com") || cleanUrl.includes("docs.google.com")) {
+    switchTab("gdrive");
+    if (gdriveUrlInput) {
+      gdriveUrlInput.value = cleanUrl;
+      gdriveUrlInput.focus();
+    }
   } else {
     switchTab("direct");
     if (directUrlInput) {
@@ -3182,6 +3224,372 @@ function stopWebcamScanner() {
   }
   const box = document.getElementById("bc-webcam-box");
   if (box) box.classList.add("hidden");
+}
+
+// ==================== GOOGLE DRIVE IDM EXTRACTOR CONTROLLER ====================
+
+let currentGDriveData = null;
+let currentFilteredFiles = [];
+
+if (btnGdriveAdvancedToggle) {
+  btnGdriveAdvancedToggle.addEventListener("click", () => {
+    if (gdriveAdvancedPanel) {
+      gdriveAdvancedPanel.classList.toggle("hidden");
+      if (gdriveAdvancedIcon) {
+        gdriveAdvancedIcon.classList.toggle("rotate-180");
+      }
+    }
+  });
+}
+
+if (btnGdrivePaste) {
+  btnGdrivePaste.addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        gdriveUrlInput.value = text.trim();
+        gdriveUrlInput.focus();
+      }
+    } catch (e) {
+      console.warn("Clipboard access not permitted:", e);
+    }
+  });
+}
+
+if (gdriveForm) {
+  gdriveForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = gdriveUrlInput.value.trim();
+    if (!url) return;
+
+    const maxDepth = parseInt((gdriveMaxDepth ? gdriveMaxDepth.value : "10") || "10", 10);
+    const apiKey = gdriveApiKey ? gdriveApiKey.value.trim() : "";
+
+    // Show loading state
+    if (btnGdriveSubmit) btnGdriveSubmit.disabled = true;
+    if (iconGdriveSubmit) iconGdriveSubmit.classList.add("hidden");
+    if (spinnerGdrive) spinnerGdrive.classList.remove("hidden");
+    if (btnGdriveText) btnGdriveText.innerText = "Đang quét các thư mục con Google Drive...";
+
+    try {
+      const resp = await fetch("/api/gdrive/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: url,
+          max_depth: maxDepth,
+          api_key: apiKey || null
+        })
+      });
+
+      const resData = await resp.json();
+      if (!resp.ok) {
+        throw new Error(resData.detail || "Không thể quét thư mục Google Drive.");
+      }
+
+      currentGDriveData = resData.data;
+      renderGDriveResults(currentGDriveData);
+    } catch (err) {
+      alert("Lỗi quét Google Drive: " + err.message);
+    } finally {
+      if (btnGdriveSubmit) btnGdriveSubmit.disabled = false;
+      if (iconGdriveSubmit) iconGdriveSubmit.classList.remove("hidden");
+      if (spinnerGdrive) spinnerGdrive.classList.add("hidden");
+      if (btnGdriveText) btnGdriveText.innerText = "Bắt Đầu Quét & Lấy Link IDM";
+    }
+  });
+}
+
+function getGDriveFileIconSvg(ext) {
+  const e = (ext || "").toLowerCase();
+  if (["mp4", "mkv", "webm", "mov", "avi", "flv", "m4v"].includes(e)) {
+    return `<svg class="w-4 h-4 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm6 4v8l6-4-6-4z"/></svg>`;
+  } else if (["mp3", "m4a", "wav", "flac", "aac", "ogg"].includes(e)) {
+    return `<svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>`;
+  } else if (["pdf"].includes(e)) {
+    return `<svg class="w-4 h-4 text-rose-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>`;
+  } else if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"].includes(e)) {
+    return `<svg class="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>`;
+  } else if (["zip", "rar", "7z", "tar", "gz", "iso", "bin"].includes(e)) {
+    return `<svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>`;
+  } else if (["doc", "docx", "txt", "xlsx", "csv", "pptx"].includes(e)) {
+    return `<svg class="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>`;
+  }
+  return `<svg class="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>`;
+}
+
+function renderGDriveResults(data) {
+  if (!data) return;
+  if (gdriveResFolderName) gdriveResFolderName.innerText = data.root_name || "Thư Mục Google Drive";
+  if (gdriveResTotalFiles) gdriveResTotalFiles.innerText = data.total_files || 0;
+  if (gdriveResTotalFolders) gdriveResTotalFolders.innerText = data.total_folders || 0;
+
+  // Setup Direct Download Button
+  if (btnGdriveDownloadDirect) {
+    if (data.files && data.files.length > 0) {
+      btnGdriveDownloadDirect.classList.remove("hidden");
+      const firstFile = data.files[0];
+      btnGdriveDownloadDirect.href = firstFile.download_url;
+      btnGdriveDownloadDirect.setAttribute("download", firstFile.name || "download");
+      if (btnGdriveDownloadText) {
+        if (data.total_files === 1) {
+          btnGdriveDownloadText.innerText = "Tải Trực Tiếp File Về Máy";
+        } else {
+          btnGdriveDownloadText.innerText = `Tải Trực Tiếp (${data.total_files} files)`;
+        }
+      }
+    } else {
+      btnGdriveDownloadDirect.classList.add("hidden");
+    }
+  }
+
+  if (gdriveResultCard) gdriveResultCard.classList.remove("hidden");
+  if (gdriveFilterInput) gdriveFilterInput.value = "";
+
+  renderGDriveFilesTable(data.files || []);
+  gdriveResultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderGDriveFilesTable(files) {
+  currentFilteredFiles = files;
+  if (gdriveShownCount) {
+    gdriveShownCount.innerText = `Hiển thị: ${files.length} / ${(currentGDriveData?.files || []).length}`;
+  }
+
+  if (!gdriveFilesTbody) return;
+  if (!files || files.length === 0) {
+    gdriveFilesTbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-slate-500 text-xs">Không tìm thấy tệp tin nào.</td></tr>`;
+    return;
+  }
+
+  gdriveFilesTbody.innerHTML = files.map((f, idx) => {
+    const icon = getGDriveFileIconSvg(f.extension);
+    const safeName = (f.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safePath = (f.path || f.folder || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const safeUrl = f.download_url;
+
+    return `
+      <tr class="hover:bg-slate-800/40 transition-colors">
+        <td class="py-3 px-4 text-center text-slate-500 text-[11px] font-mono">${idx + 1}</td>
+        <td class="py-3 px-4">
+          <div class="flex items-center gap-2.5 min-w-0 max-w-sm sm:max-w-md">
+            ${icon}
+            <span class="font-medium text-slate-200 truncate text-xs select-all" title="${safeName}">${safeName}</span>
+          </div>
+        </td>
+        <td class="py-3 px-4 hidden md:table-cell text-slate-400 text-[11px] truncate max-w-xs" title="${safePath}">
+          <span class="text-slate-500">${safePath}</span>
+        </td>
+        <td class="py-3 px-4 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <a 
+              href="${safeUrl}" 
+              target="_blank" 
+              download="${safeName}"
+              class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[11px] font-bold transition-all shadow-sm shadow-emerald-600/20 flex items-center gap-1 cursor-pointer"
+              title="Tải trực tiếp tệp này về máy"
+            >
+              <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              <span>Tải File</span>
+            </a>
+            <button 
+              type="button" 
+              class="btn-gdrive-copy-single px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-[11px] font-semibold transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
+              data-url="${safeUrl}"
+              title="Sao chép link tải IDM"
+            >
+              <svg class="w-3.5 h-3.5 text-amber-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+              <span class="hidden sm:inline">Chép Link</span>
+            </button>
+            <button 
+              type="button" 
+              class="btn-gdrive-server-download px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-purple-900/30 active:scale-95 text-purple-300 hover:text-white text-[11px] font-semibold transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
+              data-url="${safeUrl}"
+              data-name="${safeName}"
+              title="Gửi link sang máy chủ để tải về lưu trong Tệp Của Tôi"
+            >
+              <svg class="w-3.5 h-3.5 text-purple-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
+              <span class="hidden lg:inline">Server</span>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  // Attach single copy buttons listeners
+  document.querySelectorAll(".btn-gdrive-copy-single").forEach(btn => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const u = btn.getAttribute("data-url");
+      if (!u) return;
+      try {
+        await navigator.clipboard.writeText(u);
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = `<span class="text-emerald-400 font-bold">✓ Đã chép!</span>`;
+        setTimeout(() => { btn.innerHTML = origHtml; }, 1800);
+      } catch (err) {
+        console.warn("Copy error:", err);
+      }
+    });
+  });
+
+  // Attach server download button listeners
+  document.querySelectorAll(".btn-gdrive-server-download").forEach(btn => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const u = btn.getAttribute("data-url");
+      const name = btn.getAttribute("data-name");
+      if (!u) return;
+
+      switchTab("direct");
+      if (directUrlInput) {
+        directUrlInput.value = u;
+        if (directCustomName && name) directCustomName.value = name;
+        directUrlInput.dispatchEvent(new Event("input"));
+        if (btnDirectSubmit) {
+          setTimeout(() => { btnDirectSubmit.click(); }, 300);
+        }
+      }
+    });
+  });
+}
+
+// Direct download button click handler
+if (btnGdriveDownloadDirect) {
+  btnGdriveDownloadDirect.addEventListener("click", (e) => {
+    if (!currentGDriveData || !currentGDriveData.files || currentGDriveData.files.length === 0) return;
+    if (currentGDriveData.files.length > 1) {
+      e.preventDefault();
+      const list = currentFilteredFiles.length > 0 ? currentFilteredFiles : currentGDriveData.files;
+      if (confirm(`Bạn có muốn tải trực tiếp lần lượt ${list.length} tệp tin không? (Trình duyệt có thể yêu cầu cấp quyền tải nhiều tệp cùng lúc)`)) {
+        list.forEach((f, i) => {
+          setTimeout(() => {
+            const a = document.createElement("a");
+            a.href = f.download_url;
+            a.target = "_blank";
+            a.download = f.name || "file";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }, i * 500);
+        });
+      }
+    }
+  });
+}
+
+// Copy all URLs for IDM
+if (btnGdriveCopyAll) {
+  btnGdriveCopyAll.addEventListener("click", async () => {
+    const list = currentFilteredFiles.length > 0 ? currentFilteredFiles : (currentGDriveData?.files || []);
+    if (list.length === 0) {
+      alert("Không có link nào để sao chép.");
+      return;
+    }
+    const textToCopy = list.map(f => f.download_url).join("\r\n");
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      if (btnGdriveCopyText) {
+        btnGdriveCopyText.innerText = `Đã Chép ${list.length} Link!`;
+        btnGdriveCopyAll.classList.replace("bg-amber-600", "bg-emerald-600");
+        setTimeout(() => {
+          btnGdriveCopyText.innerText = "Sao Chép Tất Cả (IDM)";
+          btnGdriveCopyAll.classList.replace("bg-emerald-600", "bg-amber-600");
+        }, 2500);
+      }
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = textToCopy;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      alert(`Đã sao chép ${list.length} URL vào Clipboard để dán vào IDM!`);
+    }
+  });
+}
+
+// Export TXT
+if (btnGdriveExportTxt) {
+  btnGdriveExportTxt.addEventListener("click", async () => {
+    const list = currentFilteredFiles.length > 0 ? currentFilteredFiles : (currentGDriveData?.files || []);
+    if (list.length === 0) {
+      alert("Không có tệp nào để xuất danh sách.");
+      return;
+    }
+    const urls = list.map(f => f.download_url);
+    try {
+      const resp = await fetch("/api/gdrive/export-txt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls: urls,
+          filename: `${(currentGDriveData?.root_name || "gdrive_links").replace(/[^a-zA-Z0-9_-]/g, "_")}_idm.txt`
+        })
+      });
+      const blob = await resp.blob();
+      const dlUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = `${(currentGDriveData?.root_name || "gdrive_links").replace(/[^a-zA-Z0-9_-]/g, "_")}_idm.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(dlUrl);
+    } catch (e) {
+      alert("Lỗi xuất file .TXT: " + e.message);
+    }
+  });
+}
+
+// Export EF2
+if (btnGdriveExportEf2) {
+  btnGdriveExportEf2.addEventListener("click", async () => {
+    const list = currentFilteredFiles.length > 0 ? currentFilteredFiles : (currentGDriveData?.files || []);
+    if (list.length === 0) {
+      alert("Không có tệp nào để xuất danh sách.");
+      return;
+    }
+    const urls = list.map(f => f.download_url);
+    try {
+      const resp = await fetch("/api/gdrive/export-ef2", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          urls: urls,
+          filename: `${(currentGDriveData?.root_name || "gdrive_links").replace(/[^a-zA-Z0-9_-]/g, "_")}_idm.ef2`
+        })
+      });
+      const blob = await resp.blob();
+      const dlUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = `${(currentGDriveData?.root_name || "gdrive_links").replace(/[^a-zA-Z0-9_-]/g, "_")}_idm.ef2`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(dlUrl);
+    } catch (e) {
+      alert("Lỗi xuất file .EF2: " + e.message);
+    }
+  });
+}
+
+// Real-time Search / Filter in files list
+if (gdriveFilterInput) {
+  gdriveFilterInput.addEventListener("input", (e) => {
+    const q = (e.target.value || "").toLowerCase().trim();
+    if (!currentGDriveData || !currentGDriveData.files) return;
+    if (!q) {
+      renderGDriveFilesTable(currentGDriveData.files);
+      return;
+    }
+    const filtered = currentGDriveData.files.filter(f => {
+      return (f.name && f.name.toLowerCase().includes(q)) || (f.path && f.path.toLowerCase().includes(q));
+    });
+    renderGDriveFilesTable(filtered);
+  });
 }
 
 // Initial Boot Sequence

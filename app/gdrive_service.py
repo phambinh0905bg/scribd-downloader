@@ -1,0 +1,454 @@
+import re
+import html
+import urllib.parse
+from html.parser import HTMLParser
+from typing import Dict, List, Optional, Tuple, Any, Set
+import requests
+
+from app.direct_downloader import format_bytes_str
+
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,vi;q=0.8",
+}
+
+
+class _EmbeddedFolderParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.in_title = False
+        self.title_parts = []
+        self.title = ""
+        
+        self.in_a = False
+        self.current_href = ""
+        self.current_text = []
+        self.links: List[Tuple[str, str]] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "title":
+            self.in_title = True
+        elif tag == "a":
+            attrs_dict = dict(attrs)
+            href = attrs_dict.get("href", "")
+            if href:
+                self.in_a = True
+                self.current_href = href
+                self.current_text = []
+
+    def handle_endtag(self, tag):
+        if tag == "title":
+            self.in_title = False
+            self.title = html.unescape("".join(self.title_parts)).strip()
+        elif tag == "a" and self.in_a:
+            text = html.unescape("".join(self.current_text)).strip()
+            self.links.append((self.current_href, text))
+            self.in_a = False
+            self.current_href = ""
+            self.current_text = []
+
+    def handle_data(self, data):
+        if self.in_title:
+            self.title_parts.append(data)
+        elif self.in_a:
+            self.current_text.append(data)
+
+
+class GDriveService:
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update(DEFAULT_HEADERS)
+
+    @staticmethod
+    def parse_gdrive_url(url: str) -> Tuple[Optional[str], str]:
+        """
+        Phân tích URL Google Drive và trả về (resource_id, resource_type).
+        resource_type có thể là: 'folder', 'file', 'docs', 'sheets', 'slides' hoặc 'unknown'.
+        """
+        url_clean = url.strip()
+        if not url_clean:
+            return None, "unknown"
+
+        # Đơn giản hóa nếu người dùng chỉ nhập ID
+        if re.match(r"^([-\w]{25,})$", url_clean):
+            # Mặc định thử folder hoặc file
+            return url_clean, "folder"
+
+        parsed = urllib.parse.urlparse(url_clean)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
+
+        # 1. Thư mục (Folder)
+        folder_match = re.search(r"/drive/(?:u/[0-9]+/)?folders/([-\w]{25,})", path)
+        if folder_match:
+            return folder_match.group(1), "folder"
+
+        if "folderview" in path and "id" in query:
+            return query["id"][0], "folder"
+
+        if "embeddedfolderview" in path and "id" in query:
+            return query["id"][0], "folder"
+
+        # 2. Google Docs / Sheets / Slides
+        docs_match = re.search(r"/(document|spreadsheets|presentation)/d/([-\w]{25,})", path)
+        if docs_match:
+            kind, doc_id = docs_match.groups()
+            return doc_id, kind
+
+        # 3. File thông thường
+        file_match = re.search(r"/file/(?:u/[0-9]+/)?d/([-\w]{25,})", path)
+        if file_match:
+            return file_match.group(1), "file"
+
+        # 4. Tham số truy vấn chung ?id=
+        if "id" in query:
+            res_id = query["id"][0]
+            # Nếu path có chứa uc hoặc open
+            if "uc" in path:
+                return res_id, "file"
+            if "open" in path:
+                # Có thể là folder hoặc file, kiểm tra thêm hoặc mặc định folder
+                return res_id, "folder"
+            return res_id, "file"
+
+        return None, "unknown"
+
+    @staticmethod
+    def make_direct_download_url(file_id: str, kind: str = "file") -> str:
+        """
+        Tạo URL tải trực tiếp tối ưu cho IDM.
+        Thêm &confirm=t để bỏ qua cảnh báo dung lượng lớn của Google.
+        """
+        if kind == "document":
+            return f"https://docs.google.com/document/d/{file_id}/export?format=pdf"
+        elif kind == "spreadsheets":
+            return f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=xlsx"
+        elif kind == "presentation":
+            return f"https://docs.google.com/presentation/d/{file_id}/export?format=pptx"
+        else:
+            return f"https://drive.usercontent.google.com/download?id={file_id}&export=download&authuser=0&confirm=t"
+
+    @staticmethod
+    def make_uc_url(file_id: str) -> str:
+        return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    def get_single_file_info(self, file_id: str, kind: str = "file") -> Dict[str, Any]:
+        """
+        Lấy thông tin và link tải trực tiếp cho một tệp tin đơn lẻ.
+        """
+        download_url = self.make_direct_download_url(file_id, kind)
+        uc_url = self.make_uc_url(file_id)
+        view_url = f"https://drive.google.com/file/d/{file_id}/view"
+
+        file_name = f"gdrive_file_{file_id}"
+        size_bytes = 0
+        size_formatted = "Không xác định"
+
+        # Thử lấy tiêu đề từ trang view
+        try:
+            r = self.session.get(view_url, timeout=10)
+            if r.status_code == 200:
+                og_title_m = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
+                if og_title_m:
+                    file_name = html.unescape(og_title_m.group(1)).strip()
+                else:
+                    title_m = re.search(r'<title>(.*?)(?: - Google Drive)?</title>', r.text)
+                    if title_m:
+                        file_name = html.unescape(title_m.group(1)).strip()
+        except Exception:
+            pass
+
+        # Thử lấy kích thước file qua HEAD request đến download_url
+        try:
+            head_r = self.session.head(download_url, allow_redirects=True, timeout=8)
+            cl = head_r.headers.get("content-length")
+            if cl and cl.isdigit():
+                size_bytes = int(cl)
+                size_formatted = format_bytes_str(size_bytes)
+            
+            cd = head_r.headers.get("content-disposition", "")
+            fn_m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)["\']?', cd)
+            if fn_m:
+                cand_fn = urllib.parse.unquote(fn_m.group(1).strip())
+                if cand_fn and cand_fn != f"file_{file_id}":
+                    file_name = cand_fn
+        except Exception:
+            pass
+
+        ext = file_name.split(".")[-1].lower() if "." in file_name else ""
+        return {
+            "id": file_id,
+            "name": file_name,
+            "path": file_name,
+            "folder": "/",
+            "kind": kind,
+            "extension": ext,
+            "size_bytes": size_bytes,
+            "size_formatted": size_formatted,
+            "download_url": download_url,
+            "uc_url": uc_url,
+            "view_url": view_url,
+        }
+
+    def _parse_folder_page(self, folder_id: str) -> Tuple[str, List[Dict[str, Any]], List[Tuple[str, str]]]:
+        """
+        Đọc và phân tích trang embeddedfolderview của Google Drive.
+        Trả về (folder_title, files_list, subfolders_list).
+        """
+        url = f"https://drive.google.com/embeddedfolderview?id={folder_id}"
+        resp = self.session.get(url, timeout=15)
+        if resp.status_code != 200:
+            raise ValueError(f"Không thể đọc nội dung thư mục (Mã lỗi {resp.status_code}). Vui lòng đảm bảo thư mục được chia sẻ ở chế độ 'Bất kỳ ai có liên kết' (Anyone with the link).")
+
+        parser = _EmbeddedFolderParser()
+        parser.feed(resp.text)
+
+        folder_name = parser.title or f"Folder_{folder_id}"
+
+        files: List[Dict[str, Any]] = []
+        subfolders: List[Tuple[str, str]] = []
+        seen_ids: Set[str] = set()
+
+        for href, text in parser.links:
+            # 1. Kiểm tra File Google Drive chuẩn
+            file_match = re.search(r"https://drive\.google\.com/file/d/([-\w]{25,})", href)
+            if file_match:
+                f_id = file_match.group(1)
+                if f_id not in seen_ids:
+                    seen_ids.add(f_id)
+                    fname = text or f"file_{f_id}"
+                    ext = fname.split(".")[-1].lower() if "." in fname else ""
+                    files.append({
+                        "id": f_id,
+                        "name": fname,
+                        "kind": "file",
+                        "extension": ext,
+                        "download_url": self.make_direct_download_url(f_id, "file"),
+                        "uc_url": self.make_uc_url(f_id),
+                        "view_url": f"https://drive.google.com/file/d/{f_id}/view"
+                    })
+                continue
+
+            # 2. Kiểm tra Google Docs / Sheets / Slides
+            docs_match = re.search(r"https://docs\.google\.com/(\w+)/d/([-\w]{25,})", href)
+            if docs_match:
+                doc_kind, f_id = docs_match.groups()
+                if f_id not in seen_ids:
+                    seen_ids.add(f_id)
+                    fname = text or f"{doc_kind}_{f_id}"
+                    ext = "pdf" if doc_kind == "document" else ("xlsx" if doc_kind == "spreadsheets" else "pptx")
+                    if not fname.endswith(f".{ext}"):
+                        fname += f".{ext}"
+                    files.append({
+                        "id": f_id,
+                        "name": fname,
+                        "kind": doc_kind,
+                        "extension": ext,
+                        "download_url": self.make_direct_download_url(f_id, doc_kind),
+                        "uc_url": self.make_uc_url(f_id),
+                        "view_url": href
+                    })
+                continue
+
+            # 3. Kiểm tra Subfolder
+            folder_id_match = re.search(r"/drive/folders/([-\w]{25,})", href) or re.search(r"[?&]id=([-\w]{25,})", href)
+            if folder_id_match:
+                sub_id = folder_id_match.group(1)
+                if sub_id != folder_id and sub_id not in seen_ids:
+                    seen_ids.add(sub_id)
+                    sub_name = text or f"Subfolder_{sub_id}"
+                    subfolders.append((sub_id, sub_name))
+
+        return folder_name, files, subfolders
+
+    def _scan_folder_via_api(self, folder_id: str, api_key: str, max_depth: int = 10) -> Dict[str, Any]:
+        """
+        Quét thư mục Google Drive sử dụng Google Drive API v3 chính thức (nếu có API Key).
+        """
+        all_files: List[Dict[str, Any]] = []
+        visited_folders: Set[str] = set()
+        folder_count = 0
+
+        # Lấy tên thư mục gốc
+        root_name = f"Drive_Folder_{folder_id}"
+        try:
+            meta_url = f"https://www.googleapis.com/drive/v3/files/{folder_id}?fields=id,name&key={api_key}"
+            mr = self.session.get(meta_url, timeout=10)
+            if mr.status_code == 200:
+                root_name = mr.json().get("name", root_name)
+        except Exception:
+            pass
+
+        # Quét BFS/DFS các thư mục
+        queue: List[Tuple[str, str, int]] = [(folder_id, root_name, 0)]
+
+        while queue:
+            curr_id, curr_path, depth = queue.pop(0)
+            if curr_id in visited_folders or depth > max_depth:
+                continue
+            visited_folders.add(curr_id)
+
+            page_token = None
+            while True:
+                params = {
+                    "q": f"'{curr_id}' in parents and trashed = false",
+                    "fields": "nextPageToken, files(id, name, mimeType, size)",
+                    "pageSize": 1000,
+                    "key": api_key,
+                }
+                if page_token:
+                    params["pageToken"] = page_token
+
+                api_url = f"https://www.googleapis.com/drive/v3/files?{urllib.parse.urlencode(params)}"
+                res = self.session.get(api_url, timeout=15)
+                if res.status_code != 200:
+                    break
+
+                data = res.json()
+                items = data.get("files", [])
+
+                for item in items:
+                    mime = item.get("mimeType", "")
+                    f_id = item.get("id")
+                    f_name = item.get("name")
+
+                    if mime == "application/vnd.google-apps.folder":
+                        folder_count += 1
+                        if depth < max_depth:
+                            next_path = f"{curr_path} / {f_name}"
+                            queue.append((f_id, next_path, depth + 1))
+                    else:
+                        size_bytes = int(item.get("size", 0)) if item.get("size") else 0
+                        size_fmt = format_bytes_str(size_bytes) if size_bytes > 0 else "Không xác định"
+                        kind = "file"
+                        if "document" in mime:
+                            kind = "document"
+                        elif "spreadsheet" in mime:
+                            kind = "spreadsheets"
+                        elif "presentation" in mime:
+                            kind = "presentation"
+
+                        ext = f_name.split(".")[-1].lower() if "." in f_name else ""
+                        all_files.append({
+                            "id": f_id,
+                            "name": f_name,
+                            "path": f"{curr_path} / {f_name}",
+                            "folder": curr_path,
+                            "kind": kind,
+                            "extension": ext,
+                            "size_bytes": size_bytes,
+                            "size_formatted": size_fmt,
+                            "download_url": self.make_direct_download_url(f_id, kind),
+                            "uc_url": self.make_uc_url(f_id),
+                            "view_url": f"https://drive.google.com/file/d/{f_id}/view"
+                        })
+
+                page_token = data.get("nextPageToken")
+                if not page_token:
+                    break
+
+        return {
+            "root_name": root_name,
+            "root_id": folder_id,
+            "total_files": len(all_files),
+            "total_folders": folder_count,
+            "files": all_files
+        }
+
+    def scan_folder(self, folder_id: str, api_key: Optional[str] = None, max_depth: int = 10) -> Dict[str, Any]:
+        """
+        Quét đệ quy toàn bộ thư mục và các thư mục con lồng nhau (nested subfolders).
+        Nếu có api_key thì dùng Drive API v3, ngược lại dùng embedded web view (hoàn toàn miễn phí, không cần key).
+        """
+        if api_key and api_key.strip():
+            return self._scan_folder_via_api(folder_id, api_key.strip(), max_depth=max_depth)
+
+        all_files: List[Dict[str, Any]] = []
+        visited_folders: Set[str] = set()
+        folder_count = 0
+
+        # Lấy thông tin thư mục gốc
+        try:
+            root_name, initial_files, initial_subfolders = self._parse_folder_page(folder_id)
+        except Exception as e:
+            raise ValueError(f"Không thể kết nối đến thư mục Google Drive: {str(e)}")
+
+        visited_folders.add(folder_id)
+
+        # Thêm file ở thư mục gốc
+        for f in initial_files:
+            f["path"] = f"{root_name} / {f['name']}"
+            f["folder"] = root_name
+            f["size_bytes"] = 0
+            f["size_formatted"] = "Không xác định"
+            all_files.append(f)
+
+        # Hàng đợi quét các thư mục con lồng nhau: [(subfolder_id, subfolder_path, depth)]
+        queue: List[Tuple[str, str, int]] = [
+            (s_id, f"{root_name} / {s_name}", 1) for s_id, s_name in initial_subfolders
+        ]
+        folder_count += len(initial_subfolders)
+
+        while queue:
+            sub_id, sub_path, depth = queue.pop(0)
+            if sub_id in visited_folders or depth > max_depth:
+                continue
+            visited_folders.add(sub_id)
+
+            try:
+                sub_title, sub_files, next_subs = self._parse_folder_page(sub_id)
+                # Thêm file trong thư mục con này
+                for sf in sub_files:
+                    sf["path"] = f"{sub_path} / {sf['name']}"
+                    sf["folder"] = sub_path
+                    sf["size_bytes"] = 0
+                    sf["size_formatted"] = "Không xác định"
+                    all_files.append(sf)
+
+                # Thêm các thư mục con tiếp theo nếu còn độ sâu
+                if depth < max_depth:
+                    for n_id, n_name in next_subs:
+                        if n_id not in visited_folders:
+                            folder_count += 1
+                            queue.append((n_id, f"{sub_path} / {n_name}", depth + 1))
+            except Exception:
+                # Nếu một thư mục con bị lỗi quyền truy cập thì bỏ qua thư mục đó, tiếp tục các thư mục khác
+                continue
+
+        return {
+            "root_name": root_name,
+            "root_id": folder_id,
+            "total_files": len(all_files),
+            "total_folders": folder_count,
+            "files": all_files
+        }
+
+    def scan_url(self, url: str, api_key: Optional[str] = None, max_depth: int = 10) -> Dict[str, Any]:
+        """
+        Hàm tổng quát: Nhận vào link bất kỳ (Folder hoặc File), tự động nhận diện và quét.
+        """
+        res_id, res_type = self.parse_gdrive_url(url)
+        if not res_id:
+            raise ValueError("Đường dẫn Google Drive không hợp lệ. Vui lòng kiểm tra lại link Folder hoặc File.")
+
+        if res_type == "folder":
+            # Thư mục -> quét toàn bộ thư mục và nested folders
+            result = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth)
+            result["resource_type"] = "folder"
+            return result
+        else:
+            # File đơn lẻ -> lấy thông tin file
+            file_info = self.get_single_file_info(res_id, kind=res_type)
+            return {
+                "root_name": file_info["name"],
+                "root_id": res_id,
+                "resource_type": "file",
+                "total_files": 1,
+                "total_folders": 0,
+                "files": [file_info]
+            }
+
+
+gdrive_service = GDriveService()
+
