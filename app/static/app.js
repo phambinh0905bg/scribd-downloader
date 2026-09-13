@@ -3329,7 +3329,8 @@ function renderGDriveResults(data) {
     if (data.files && data.files.length > 0) {
       btnGdriveDownloadDirect.classList.remove("hidden");
       const firstFile = data.files[0];
-      btnGdriveDownloadDirect.href = `/api/gdrive/download/${firstFile.id}`;
+      const dlLink = getBestIDMUrl(firstFile);
+      btnGdriveDownloadDirect.href = dlLink;
       btnGdriveDownloadDirect.setAttribute("download", firstFile.name || "download");
       if (btnGdriveDownloadText) {
         if (data.total_files === 1) {
@@ -3366,8 +3367,7 @@ function renderGDriveFilesTable(files) {
     const icon = getGDriveFileIconSvg(f.extension);
     const safeName = (f.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const safePath = (f.path || f.folder || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const safeUrl = f.download_url;
-    const dlUrl = `/api/gdrive/download/${f.id}`;
+    const idmUrl = getBestIDMUrl(f);
 
     return `
       <tr class="hover:bg-slate-800/40 transition-colors">
@@ -3384,7 +3384,7 @@ function renderGDriveFilesTable(files) {
         <td class="py-3 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
             <a 
-              href="${dlUrl}" 
+              href="${idmUrl}" 
               target="_blank" 
               download="${safeName}"
               class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[11px] font-bold transition-all shadow-sm shadow-emerald-600/20 flex items-center gap-1 cursor-pointer"
@@ -3396,7 +3396,7 @@ function renderGDriveFilesTable(files) {
             <button 
               type="button" 
               class="btn-gdrive-copy-single px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-[11px] font-semibold transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
-              data-url="${safeUrl}"
+              data-url="${idmUrl}"
               title="Sao chép link tải IDM"
             >
               <svg class="w-3.5 h-3.5 text-amber-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
@@ -3405,7 +3405,7 @@ function renderGDriveFilesTable(files) {
             <button 
               type="button" 
               class="btn-gdrive-server-download px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-purple-900/30 active:scale-95 text-purple-300 hover:text-white text-[11px] font-semibold transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
-              data-url="${safeUrl}"
+              data-url="${idmUrl}"
               data-name="${safeName}"
               title="Gửi link sang máy chủ để tải về lưu trong Tệp Của Tôi"
             >
@@ -3467,7 +3467,7 @@ if (btnGdriveDownloadDirect) {
         list.forEach((f, i) => {
           setTimeout(() => {
             const a = document.createElement("a");
-            a.href = `/api/gdrive/download/${f.id}`;
+            a.href = getBestIDMUrl(f);
             a.target = "_blank";
             a.download = f.name || "file";
             document.body.appendChild(a);
@@ -3482,7 +3482,11 @@ if (btnGdriveDownloadDirect) {
 
 // Get the best IDM download URL for a file
 function getBestIDMUrl(f) {
+  if (!f) return "";
   if (f.download_url && f.download_url.includes("uuid=")) {
+    return f.download_url;
+  }
+  if (f.kind && f.kind !== "file" && f.download_url) {
     return f.download_url;
   }
   return `${window.location.origin}/api/gdrive/download/${f.id}`;

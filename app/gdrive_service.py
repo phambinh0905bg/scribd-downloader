@@ -104,12 +104,12 @@ class GDriveService:
         # 4. Tham số truy vấn chung ?id=
         if "id" in query:
             res_id = query["id"][0]
-            # Nếu path có chứa uc hoặc open
-            if "uc" in path:
+            # Nếu path có chứa uc, download hoặc open
+            if "uc" in path or "download" in path:
                 return res_id, "file"
             if "open" in path:
-                # Có thể là folder hoặc file, kiểm tra thêm hoặc mặc định folder
-                return res_id, "folder"
+                # 'open?id=' thường được chia sẻ cho file, mặc định là file
+                return res_id, "file"
             return res_id, "file"
 
         return None, "unknown"
@@ -127,7 +127,7 @@ class GDriveService:
         elif kind == "presentation":
             return f"https://docs.google.com/presentation/d/{file_id}/export?format=pptx"
         else:
-            return f"https://drive.usercontent.google.com/download?id={file_id}&export=download&authuser=0&confirm=t"
+            return f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
 
     @staticmethod
     def make_uc_url(file_id: str) -> str:
@@ -460,6 +460,30 @@ class GDriveService:
                 # Nếu một thư mục con bị lỗi quyền truy cập thì bỏ qua thư mục đó, tiếp tục các thư mục khác
                 continue
 
+        # Tự động giải quyết UUID token cho các tệp tin trong thư mục để bypass cảnh báo virus file lớn
+        def _enrich_file(f):
+            if f.get("kind") == "file":
+                try:
+                    direct_url, r_name, r_size = self.resolve_direct_download_url(f["id"], "file")
+                    f["download_url"] = direct_url
+                    if r_name and not r_name.startswith("file_") and not r_name.startswith("gdrive_file_"):
+                        f["name"] = r_name
+                    if r_size:
+                        f["size_formatted"] = r_size
+                except Exception:
+                    pass
+            f["smart_url"] = f"/api/gdrive/download/{f['id']}"
+            return f
+
+        if all_files:
+            from concurrent.futures import ThreadPoolExecutor
+            max_w = min(10, max(2, len(all_files)))
+            try:
+                with ThreadPoolExecutor(max_workers=max_w) as executor:
+                    all_files = list(executor.map(_enrich_file, all_files))
+            except Exception:
+                pass
+
         return {
             "root_name": root_name,
             "root_id": folder_id,
@@ -479,11 +503,38 @@ class GDriveService:
         if res_type == "folder":
             # Thư mục -> quét toàn bộ thư mục và nested folders
             result = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth)
+            # Nếu quét thư mục không ra file nào, thử kiểm tra xem có phải file đơn lẻ không
+            if result.get("total_files", 0) == 0:
+                try:
+                    file_info = self.get_single_file_info(res_id, kind="file")
+                    if file_info and not file_info["name"].startswith("gdrive_file_"):
+                        return {
+                            "root_name": file_info["name"],
+                            "root_id": res_id,
+                            "resource_type": "file",
+                            "total_files": 1,
+                            "total_folders": 0,
+                            "files": [file_info]
+                        }
+                except Exception:
+                    pass
             result["resource_type"] = "folder"
             return result
         else:
             # File đơn lẻ -> lấy thông tin file
-            file_info = self.get_single_file_info(res_id, kind=res_type)
+            try:
+                file_info = self.get_single_file_info(res_id, kind=res_type)
+            except Exception as e:
+                # Fallback thử quét như folder nếu lấy file thất bại
+                try:
+                    folder_res = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth)
+                    if folder_res.get("total_files", 0) > 0:
+                        folder_res["resource_type"] = "folder"
+                        return folder_res
+                except Exception:
+                    pass
+                raise e
+
             return {
                 "root_name": file_info["name"],
                 "root_id": res_id,

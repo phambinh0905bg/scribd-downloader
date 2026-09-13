@@ -448,6 +448,7 @@ async def scan_gdrive_endpoint(req: GDriveScanRequest, request: Request):
         raise HTTPException(status_code=400, detail="Vui lòng nhập đường dẫn Google Drive.")
     
     from app.gdrive_service import gdrive_service
+    logger.info(f"[GDrive Scan] Bắt đầu quét URL: {url}")
     try:
         data = await asyncio.to_thread(
             gdrive_service.scan_url,
