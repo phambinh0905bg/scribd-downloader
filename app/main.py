@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import urllib.parse
+import requests
 
 from fastapi import FastAPI, Request, Response, HTTPException, BackgroundTasks, status, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse, RedirectResponse
@@ -85,6 +86,7 @@ async def auth_middleware(request: Request, call_next):
         not settings.AUTH_ENABLED
         or path.startswith("/static")
         or path.startswith("/api/gdrive/download/")
+        or path.startswith("/api/gdrive/stream/")
         or path in ("/login", "/logout", "/favicon.ico", "/api/version")
     ):
         return await call_next(request)
@@ -497,10 +499,12 @@ async def export_gdrive_txt(req: GDriveExportRequest):
         raise HTTPException(status_code=400, detail="Danh sách URL trống.")
     content = "\r\n".join(req.urls) + "\r\n"
     fn = req.filename or "gdrive_idm_links.txt"
+    clean_ascii_fn = re.sub(r'[^\x20-\x7E]', '_', fn)
+    encoded_fn = urllib.parse.quote(fn)
     return Response(
         content=content,
         media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{fn}"'}
+        headers={"Content-Disposition": f'attachment; filename="{clean_ascii_fn}"; filename*=UTF-8\'\'{encoded_fn}'}
     )
 
 
@@ -538,10 +542,13 @@ async def export_gdrive_ef2(req: GDriveExportRequest):
     if not fn.endswith(".ef2"):
         fn += ".ef2"
 
+    clean_ascii_fn = re.sub(r'[^\x20-\x7E]', '_', fn)
+    encoded_fn = urllib.parse.quote(fn)
+
     return Response(
         content=content.encode("utf-8"),
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{fn}"'}
+        headers={"Content-Disposition": f'attachment; filename="{clean_ascii_fn}"; filename*=UTF-8\'\'{encoded_fn}'}
     )
 
 
@@ -597,8 +604,82 @@ async def gdrive_direct_download_redirect(file_id: str, file_name: Optional[str]
     headers = {}
     if file_name or res_name:
         fn = file_name or res_name
-        headers["Content-Disposition"] = f'attachment; filename="{fn}"'
+        clean_ascii = re.sub(r'[^\x20-\x7E]', '_', fn)
+        encoded_fn = urllib.parse.quote(fn)
+        headers["Content-Disposition"] = f'attachment; filename="{clean_ascii}"; filename*=UTF-8\'\'{encoded_fn}'
     return RedirectResponse(url=direct_url, status_code=status.HTTP_302_FOUND, headers=headers)
+
+
+@app.get("/api/gdrive/stream/{file_id}")
+@app.get("/api/gdrive/stream/{file_id}/{file_name}")
+async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, request: Request = None):
+    """
+    Streaming proxy hoàn hảo cho IDM và Trình duyệt:
+    1. Kiểm tra nếu file đã có trên server (/disk1/data/downloads) thì phục vụ bằng tốc độ mạng LAN nội bộ (Gigabit).
+    2. Nếu chưa có trên server, server kết nối tới Google Drive với bypass token và stream trực tiếp về IDM với đầy đủ hỗ trợ HTTP Range (206 Partial Content), giúp IDM tải đa luồng mà KHÔNG BAO GIỜ bị dính trang cảnh báo virus HTML.
+    """
+    from app.gdrive_service import gdrive_service
+
+    # 1. Kiểm tra cache tệp đã tải về server
+    downloads_dir = settings.DOWNLOADS_DIR
+    if downloads_dir.exists():
+        for item in downloads_dir.iterdir():
+            if not item.is_dir() or item.name in (".gitkeep", "temp"):
+                continue
+            for f in item.iterdir():
+                if f.is_file() and not f.name.endswith(".part") and not f.name.endswith(".ytdl"):
+                    if file_name and f.name == file_name:
+                        ext = f.suffix.lower()
+                        media_type = "video/mp4" if ext in [".mp4", ".mkv"] else ("application/pdf" if ext == ".pdf" else "application/octet-stream")
+                        return FileResponse(path=str(f), filename=f.name, media_type=media_type)
+
+    # 2. Lấy link Google Drive với token bypass
+    direct_url, res_name, _ = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    fn = file_name or res_name or f"file_{file_id}.bin"
+    clean_ascii = re.sub(r'[^\x20-\x7E]', '_', fn)
+    encoded_fn = urllib.parse.quote(fn)
+    cd_header = f'attachment; filename="{clean_ascii}"; filename*=UTF-8\'\'{encoded_fn}'
+
+    req_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+    }
+    range_header = request.headers.get("range") if request else None
+    if range_header:
+        req_headers["Range"] = range_header
+
+    def stream_producer():
+        with requests.get(direct_url, headers=req_headers, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=512 * 1024):
+                if chunk:
+                    yield chunk
+
+    # Lấy thông tin header từ Google Drive
+    probe_resp = requests.get(direct_url, headers=req_headers, stream=True, timeout=15)
+    probe_status = probe_resp.status_code
+    probe_headers = dict(probe_resp.headers)
+    probe_resp.close()
+
+    resp_headers = {
+        "Content-Disposition": cd_header,
+        "Accept-Ranges": "bytes",
+    }
+    if probe_resp.headers.get("content-range"):
+        resp_headers["Content-Range"] = probe_resp.headers.get("content-range")
+    if probe_resp.headers.get("content-length"):
+        resp_headers["Content-Length"] = probe_resp.headers.get("content-length")
+
+    media_type = probe_resp.headers.get("content-type", "application/octet-stream")
+    if "text/html" in media_type:
+        media_type = "application/octet-stream"
+
+    return StreamingResponse(
+        stream_producer(),
+        status_code=probe_status if probe_status in (200, 206) else 200,
+        media_type=media_type,
+        headers=resp_headers
+    )
 
 
 # --- UNIVERSAL STATUS & STREAMING ---

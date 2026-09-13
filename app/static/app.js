@@ -3595,16 +3595,11 @@ if (btnGdriveDownloadAllServer) {
   });
 }
 
-// Get the best IDM download URL for a file
+// Get the best IDM download URL for a file (via server streaming proxy to avoid virus scan HTML)
 function getBestIDMUrl(f) {
   if (!f) return "";
-  if (f.download_url && f.download_url.includes("uuid=")) {
-    return f.download_url;
-  }
-  if (f.kind && f.kind !== "file" && f.download_url) {
-    return f.download_url;
-  }
-  return `${window.location.origin}/api/gdrive/download/${f.id}`;
+  const safeName = encodeURIComponent(f.name || "download_file");
+  return `${window.location.origin}/api/gdrive/stream/${f.id}/${safeName}`;
 }
 
 // Copy all URLs for IDM
