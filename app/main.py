@@ -149,8 +149,14 @@ class GDriveScanRequest(BaseModel):
     max_depth: Optional[int] = 10
 
 
+class GDriveExportItem(BaseModel):
+    url: str
+    name: Optional[str] = None
+
+
 class GDriveExportRequest(BaseModel):
-    urls: List[str]
+    urls: Optional[List[str]] = None
+    items: Optional[List[GDriveExportItem]] = None
     filename: Optional[str] = "idm_links.txt"
 
 
@@ -488,31 +494,59 @@ async def export_gdrive_txt(req: GDriveExportRequest):
 
 @app.post("/api/gdrive/export-ef2")
 async def export_gdrive_ef2(req: GDriveExportRequest):
-    if not req.urls:
-        raise HTTPException(status_code=400, detail="Danh sách URL trống.")
+    items: List[GDriveExportItem] = []
+    if req.items:
+        items = req.items
+    elif req.urls:
+        items = [GDriveExportItem(url=u) for u in req.urls]
+
+    if not items:
+        raise HTTPException(status_code=400, detail="Danh sách tệp trống.")
+
     lines = []
-    for u in req.urls:
-        u_clean = u.strip()
-        if u_clean:
-            lines.append(f"<\r\n{u_clean}\r\n>")
+    for it in items:
+        u_clean = (it.url or "").strip()
+        if not u_clean:
+            continue
+        raw_name = (it.name or "").strip()
+        clean_name = re.sub(r'[\r\n\t]', '', raw_name) if raw_name else "file_download"
+
+        lines.append(
+            f"<\r\n"
+            f"{u_clean}\r\n"
+            f"referer: https://drive.google.com/\r\n"
+            f"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36\r\n"
+            f"filename: {clean_name}\r\n"
+            f"comment: {clean_name}\r\n"
+            f">"
+        )
+
     content = "\r\n".join(lines) + "\r\n"
-    fn = "gdrive_idm_links.ef2"
+    fn = req.filename or "gdrive_idm_links.ef2"
+    if not fn.endswith(".ef2"):
+        fn += ".ef2"
+
     return Response(
-        content=content,
+        content=content.encode("utf-8"),
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{fn}"'}
     )
 
 
 @app.get("/api/gdrive/download/{file_id}")
-async def gdrive_direct_download_redirect(file_id: str):
+@app.get("/api/gdrive/download/{file_id}/{file_name}")
+async def gdrive_direct_download_redirect(file_id: str, file_name: Optional[str] = None):
     """
     Tự động giải quyết UUID token để bypass cảnh báo virus quét tệp dung lượng lớn (>100MB)
     và chuyển hướng 302 sang URL tải trực tiếp của Google Drive để IDM hoặc trình duyệt tải ngay.
     """
     from app.gdrive_service import gdrive_service
-    direct_url, _, _ = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
-    return RedirectResponse(url=direct_url, status_code=status.HTTP_302_FOUND)
+    direct_url, res_name, _ = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    headers = {}
+    if file_name or res_name:
+        fn = file_name or res_name
+        headers["Content-Disposition"] = f'attachment; filename="{fn}"'
+    return RedirectResponse(url=direct_url, status_code=status.HTTP_302_FOUND, headers=headers)
 
 
 # --- UNIVERSAL STATUS & STREAMING ---

@@ -3564,13 +3564,17 @@ if (btnGdriveExportEf2) {
       alert("Không có tệp nào để xuất danh sách.");
       return;
     }
-    const urls = list.map(f => getBestIDMUrl(f));
+    const items = list.map(f => ({
+      url: getBestIDMUrl(f),
+      name: f.name || "download_file"
+    }));
     try {
       const resp = await fetch("/api/gdrive/export-ef2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          urls: urls,
+          items: items,
+          urls: items.map(it => it.url),
           filename: `${(currentGDriveData?.root_name || "gdrive_links").replace(/[^a-zA-Z0-9_-]/g, "_")}_idm.ef2`
         })
       });

@@ -36,7 +36,7 @@ ENDPOINT_ID = os.environ.get("PORTAINER_ENDPOINT_ID", "3")
 GH_USERNAME = os.environ.get("GH_USERNAME", "phambinh0905bg")
 GH_TOKEN = get_env_var("GH_TOKEN", get_env_var("GITHUB_TOKEN"))
 REGISTRY_HOST = "ghcr.io"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 IMAGE_TAG = f"{REGISTRY_HOST}/{GH_USERNAME}/scribd-downloader:latest"
 IMAGE_VERSION_TAG = f"{REGISTRY_HOST}/{GH_USERNAME}/scribd-downloader:v{APP_VERSION}"
 
