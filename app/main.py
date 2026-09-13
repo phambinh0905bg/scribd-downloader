@@ -84,7 +84,7 @@ async def auth_middleware(request: Request, call_next):
         not settings.AUTH_ENABLED
         or path.startswith("/static")
         or path.startswith("/api/gdrive/download/")
-        or path in ("/login", "/logout", "/favicon.ico")
+        or path in ("/login", "/logout", "/favicon.ico", "/api/version")
     ):
         return await call_next(request)
         
@@ -207,8 +207,19 @@ async def login_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"app_name": settings.APP_NAME}
+        context={"app_name": settings.APP_NAME, "app_version": settings.APP_VERSION}
     )
+
+
+@app.get("/api/version")
+async def get_app_version():
+    """Endpoint công khai trả về phiên bản hiện tại của ứng dụng."""
+    return {
+        "status": "success",
+        "app_name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "app_version": settings.APP_VERSION
+    }
 
 
 @app.post("/login")

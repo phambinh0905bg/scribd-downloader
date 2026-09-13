@@ -36,7 +36,9 @@ ENDPOINT_ID = os.environ.get("PORTAINER_ENDPOINT_ID", "3")
 GH_USERNAME = os.environ.get("GH_USERNAME", "phambinh0905bg")
 GH_TOKEN = get_env_var("GH_TOKEN", get_env_var("GITHUB_TOKEN"))
 REGISTRY_HOST = "ghcr.io"
+APP_VERSION = "2.3.0"
 IMAGE_TAG = f"{REGISTRY_HOST}/{GH_USERNAME}/scribd-downloader:latest"
+IMAGE_VERSION_TAG = f"{REGISTRY_HOST}/{GH_USERNAME}/scribd-downloader:v{APP_VERSION}"
 
 
 CONTAINER_NAME = "scribd-downloader"
@@ -108,6 +110,14 @@ def build_docker_image(tar_bytes: bytes):
                 pass
                 
     log(f"✅ Build & Tag thành công: {IMAGE_TAG}", "SUCCESS")
+    # Gắn thêm tag phiên bản lên Docker host
+    try:
+        tag_repo = f"{REGISTRY_HOST}/{GH_USERNAME}/scribd-downloader"
+        requests.post(f"{DOCKER_API_BASE}/images/{IMAGE_TAG}/tag?repo={tag_repo}&tag=v{APP_VERSION}", headers=HEADERS)
+        requests.post(f"{DOCKER_API_BASE}/images/{IMAGE_TAG}/tag?repo={tag_repo}&tag={APP_VERSION}", headers=HEADERS)
+        log(f"🏷️ Đã gắn tag phiên bản trên Docker host: v{APP_VERSION} & {APP_VERSION}", "SUCCESS")
+    except Exception as e:
+        log(f"⚠️ Không thể gắn tag phiên bản: {e}", "WARN")
 
 def push_image_to_ghcr():
     log(f"🚀 Đang push image '{IMAGE_TAG}' lên GitHub Container Registry ({REGISTRY_HOST})...")
@@ -119,32 +129,29 @@ def push_image_to_ghcr():
     }
     auth_header = base64.b64encode(json.dumps(auth_config).encode()).decode()
     
-    push_url = f"{DOCKER_API_BASE}/images/{IMAGE_TAG}/push"
     headers = {
         **HEADERS,
         "X-Registry-Auth": auth_header
     }
     
-    res = requests.post(push_url, headers=headers, stream=True, timeout=(60, 1800))
-    if res.status_code != 200:
-        log(f"❌ Lỗi push image ({res.status_code}): {res.text}", "ERROR")
-        sys.exit(1)
-        
-    for line in res.iter_lines(decode_unicode=True):
-        if line:
-            try:
-                msg_obj = json.loads(line)
-                if "status" in msg_obj:
-                    p_id = msg_obj.get("id", "")
-                    p_prog = msg_obj.get("progress", "")
-                    log(f"[Push] {p_id} {msg_obj['status']} {p_prog}".strip())
-                elif "error" in msg_obj:
-                    log(f"⚠️ [Push Warning] {msg_obj['error']}", "WARN")
-                    log("⚠️ Không thể push lên GHCR (có thể do mạng chập chờn), nhưng image đã được build thành công trực tiếp trên máy chủ. Tiếp tục deploy image local!", "WARN")
-                    return
-            except Exception:
-                pass
-                
+    for tag_to_push in [IMAGE_TAG, IMAGE_VERSION_TAG]:
+        push_url = f"{DOCKER_API_BASE}/images/{tag_to_push}/push"
+        res = requests.post(push_url, headers=headers, stream=True, timeout=(60, 1800))
+        if res.status_code != 200:
+            log(f"⚠️ Cảnh báo push ({tag_to_push}): {res.text}", "WARN")
+            continue
+            
+        for line in res.iter_lines(decode_unicode=True):
+            if line:
+                try:
+                    msg_obj = json.loads(line)
+                    if "status" in msg_obj:
+                        p_id = msg_obj.get("id", "")
+                        p_prog = msg_obj.get("progress", "")
+                        log(f"[Push {tag_to_push.split(':')[-1]}] {p_id} {msg_obj['status']} {p_prog}".strip())
+                except Exception:
+                    pass
+                    
     log(f"🎉 Push thành công image lên GHCR: https://ghcr.io/{GH_USERNAME}/scribd-downloader", "SUCCESS")
 
 def remove_existing_container():
@@ -175,10 +182,16 @@ def create_and_start_container():
         "Env": [
             "PORT=8000",
             "HOST=0.0.0.0",
+            f"APP_VERSION={APP_VERSION}",
             "CLEANUP_MINUTES=300",
             "MAX_CONCURRENT_DOWNLOADS=4",
             "DEVICE_SCALE_FACTOR=2.0"
         ],
+        "Labels": {
+            "version": f"v{APP_VERSION}",
+            "app_version": APP_VERSION,
+            "org.opencontainers.image.version": APP_VERSION
+        },
         "HostConfig": {
             "NetworkMode": "home-network",
             "Binds": [
