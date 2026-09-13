@@ -594,6 +594,8 @@ async def download_all_gdrive_to_server(req: GDriveDownloadServerRequest, reques
 
 @app.get("/api/gdrive/download/{file_id}")
 @app.get("/api/gdrive/download/{file_id}/{file_name}")
+@app.head("/api/gdrive/download/{file_id}")
+@app.head("/api/gdrive/download/{file_id}/{file_name}")
 async def gdrive_direct_download_redirect(file_id: str, file_name: Optional[str] = None):
     """
     Tự động giải quyết UUID token để bypass cảnh báo virus quét tệp dung lượng lớn (>100MB)
@@ -612,6 +614,8 @@ async def gdrive_direct_download_redirect(file_id: str, file_name: Optional[str]
 
 @app.get("/api/gdrive/stream/{file_id}")
 @app.get("/api/gdrive/stream/{file_id}/{file_name}")
+@app.head("/api/gdrive/stream/{file_id}")
+@app.head("/api/gdrive/stream/{file_id}/{file_name}")
 async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, request: Request = None):
     """
     Streaming proxy hoàn hảo cho IDM và Trình duyệt:
@@ -673,6 +677,14 @@ async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, req
     media_type = probe_resp.headers.get("content-type", "application/octet-stream")
     if "text/html" in media_type:
         media_type = "application/octet-stream"
+
+    if request and request.method == "HEAD":
+        return Response(
+            content=b"",
+            status_code=probe_status if probe_status in (200, 206) else 200,
+            media_type=media_type,
+            headers=resp_headers
+        )
 
     return StreamingResponse(
         stream_producer(),
