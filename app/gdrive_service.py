@@ -164,9 +164,14 @@ class GDriveService:
 
             # Nếu là trang cảnh báo quét virus của Google Drive
             html_text = r.text
-            uuid_m = re.search(r'name=["\']uuid["\']\s+value=["\']([^"\']+)["\']', html_text) or re.search(r'value=["\']([^"\']+)["\']\s+name=["\']uuid["\']', html_text)
-            if uuid_m:
-                uuid = uuid_m.group(1).strip()
+            form_inputs = dict(re.findall(r'<input\s+[^>]*name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']*)["\']', html_text))
+            # Fallback regex nếu value đứng trước name
+            if not form_inputs:
+                rev_inputs = re.findall(r'<input\s+[^>]*value=["\']([^"\']*)["\'][^>]*name=["\']([^"\']+)["\']', html_text)
+                form_inputs = {k: v for v, k in rev_inputs}
+
+            uuid = form_inputs.get("uuid", "").strip() or None
+            at_val = form_inputs.get("at", "").strip() or None
 
             # Lấy tên file và kích thước hiển thị trong trang cảnh báo
             # Ví dụ: <a href="...open?id=...">Tên tệp</a> (960M)
@@ -185,10 +190,13 @@ class GDriveService:
         except Exception:
             pass
 
+        url_params = [f"id={file_id}", "export=download", "confirm=t"]
         if uuid:
-            final_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&uuid={uuid}"
-        else:
-            final_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+            url_params.append(f"uuid={uuid}")
+        if at_val:
+            url_params.append(f"at={at_val}")
+
+        final_url = f"https://drive.usercontent.google.com/download?{'&'.join(url_params)}"
 
         return final_url, file_name, file_size_str
 
