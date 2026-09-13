@@ -161,6 +161,17 @@ class GDriveExportRequest(BaseModel):
     filename: Optional[str] = "idm_links.txt"
 
 
+class GDriveDownloadServerItem(BaseModel):
+    url: Optional[str] = None
+    id: Optional[str] = None
+    name: Optional[str] = None
+    path: Optional[str] = None
+
+
+class GDriveDownloadServerRequest(BaseModel):
+    items: List[GDriveDownloadServerItem]
+
+
 class TelegramConfigRequest(BaseModel):
     bot_token: str
     chat_id: str
@@ -532,6 +543,46 @@ async def export_gdrive_ef2(req: GDriveExportRequest):
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{fn}"'}
     )
+
+
+@app.post("/api/gdrive/download-all-to-server")
+async def download_all_gdrive_to_server(req: GDriveDownloadServerRequest, request: Request):
+    enforce_rbac_and_abac(request, "download:direct", service="gdrive_batch")
+    if not req.items:
+        raise HTTPException(status_code=400, detail="Danh sách tệp tin trống.")
+
+    from app.gdrive_service import gdrive_service
+
+    tasks_created = []
+    for it in req.items:
+        file_url = (it.url or "").strip()
+        file_id = (it.id or "").strip()
+        custom_name = (it.name or "").strip() or None
+
+        if not file_url and file_id:
+            file_url = gdrive_service.make_direct_download_url(file_id)
+
+        if not file_url:
+            continue
+
+        task_id = str(uuid.uuid4())[:8]
+        task = DirectDownloadTask(
+            task_id=task_id,
+            url=file_url,
+            custom_filename=custom_name
+        )
+        await direct_downloader_service.start_download_task(task)
+        tasks_created.append({"task_id": task_id, "name": custom_name or task_id})
+
+    if not tasks_created:
+        raise HTTPException(status_code=400, detail="Không có tệp hợp lệ nào để tải về máy chủ.")
+
+    return {
+        "status": "success",
+        "count": len(tasks_created),
+        "tasks": tasks_created,
+        "message": f"Đã đưa {len(tasks_created)} tệp tin vào hàng đợi tải của máy chủ lưu trữ."
+    }
 
 
 @app.get("/api/gdrive/download/{file_id}")

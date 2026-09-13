@@ -102,6 +102,8 @@ const gdriveResTotalFiles = document.getElementById("gdrive-res-total-files");
 const gdriveResTotalFolders = document.getElementById("gdrive-res-total-folders");
 const btnGdriveDownloadDirect = document.getElementById("btn-gdrive-download-direct");
 const btnGdriveDownloadText = document.getElementById("btn-gdrive-download-text");
+const btnGdriveDownloadAllServer = document.getElementById("btn-gdrive-download-all-server");
+const btnGdriveServerText = document.getElementById("btn-gdrive-server-text");
 const btnGdriveCopyAll = document.getElementById("btn-gdrive-copy-all");
 const btnGdriveCopyText = document.getElementById("btn-gdrive-copy-text");
 const btnGdriveExportTxt = document.getElementById("btn-gdrive-export-txt");
@@ -3344,6 +3346,22 @@ function renderGDriveResults(data) {
     }
   }
 
+  // Setup Server Download Button
+  if (btnGdriveDownloadAllServer) {
+    if (data.files && data.files.length > 0) {
+      btnGdriveDownloadAllServer.classList.remove("hidden");
+      if (btnGdriveServerText) {
+        if (data.total_files === 1) {
+          btnGdriveServerText.innerText = "Tải Về Server";
+        } else {
+          btnGdriveServerText.innerText = `Tải Tất Cả Về Server (${data.total_files})`;
+        }
+      }
+    } else {
+      btnGdriveDownloadAllServer.classList.add("hidden");
+    }
+  }
+
   if (gdriveResultCard) gdriveResultCard.classList.remove("hidden");
   if (gdriveFilterInput) gdriveFilterInput.value = "";
 
@@ -3355,6 +3373,14 @@ function renderGDriveFilesTable(files) {
   currentFilteredFiles = files;
   if (gdriveShownCount) {
     gdriveShownCount.innerText = `Hiển thị: ${files.length} / ${(currentGDriveData?.files || []).length}`;
+  }
+
+  if (btnGdriveServerText && currentGDriveData?.files) {
+    if (files.length === 1) {
+      btnGdriveServerText.innerText = "Tải Về Server";
+    } else {
+      btnGdriveServerText.innerText = `Tải Tất Cả Về Server (${files.length})`;
+    }
   }
 
   if (!gdriveFilesTbody) return;
@@ -3373,9 +3399,15 @@ function renderGDriveFilesTable(files) {
       <tr class="hover:bg-slate-800/40 transition-colors">
         <td class="py-3 px-4 text-center text-slate-500 text-[11px] font-mono">${idx + 1}</td>
         <td class="py-3 px-4">
-          <div class="flex items-center gap-2.5 min-w-0 max-w-sm sm:max-w-md">
+          <div class="flex items-center gap-2.5">
             ${icon}
-            <span class="font-medium text-slate-200 truncate text-xs select-all" title="${safeName}">${safeName}</span>
+            <div class="min-w-0">
+              <p class="font-medium text-slate-200 truncate max-w-sm sm:max-w-md md:max-w-lg" title="${safeName}">${safeName}</p>
+              <div class="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
+                <span>${f.size_formatted || "Không rõ kích thước"}</span>
+                ${f.extension ? `<span>•</span><span class="uppercase">${f.extension}</span>` : ""}
+              </div>
+            </div>
           </div>
         </td>
         <td class="py-3 px-4 hidden md:table-cell text-slate-400 text-[11px] truncate max-w-xs" title="${safePath}">
@@ -3407,7 +3439,7 @@ function renderGDriveFilesTable(files) {
               class="btn-gdrive-server-download px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-purple-900/30 active:scale-95 text-purple-300 hover:text-white text-[11px] font-semibold transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"
               data-url="${idmUrl}"
               data-name="${safeName}"
-              title="Gửi link sang máy chủ để tải về lưu trong Tệp Của Tôi"
+              title="Gửi tệp sang máy chủ để tải về lưu trong Tệp Của Tôi"
             >
               <svg class="w-3.5 h-3.5 text-purple-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
               <span class="hidden lg:inline">Server</span>
@@ -3435,7 +3467,7 @@ function renderGDriveFilesTable(files) {
     });
   });
 
-  // Attach server download button listeners
+  // Attach server download button listeners (Direct queue to server)
   document.querySelectorAll(".btn-gdrive-server-download").forEach(btn => {
     btn.addEventListener("click", async (ev) => {
       ev.stopPropagation();
@@ -3443,14 +3475,29 @@ function renderGDriveFilesTable(files) {
       const name = btn.getAttribute("data-name");
       if (!u) return;
 
-      switchTab("direct");
-      if (directUrlInput) {
-        directUrlInput.value = u;
-        if (directCustomName && name) directCustomName.value = name;
-        directUrlInput.dispatchEvent(new Event("input"));
-        if (btnDirectSubmit) {
-          setTimeout(() => { btnDirectSubmit.click(); }, 300);
-        }
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = `<svg class="animate-spin w-3.5 h-3.5 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden lg:inline text-purple-300">Đang gửi...</span>`;
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch("/api/direct/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: u, custom_filename: name })
+        });
+        const resData = await resp.json();
+        if (!resp.ok) throw new Error(resData.detail || "Lỗi gửi lệnh tải về máy chủ");
+
+        btn.innerHTML = `<span class="text-emerald-400 font-bold">✓ Vào Server!</span>`;
+        loadFilesBadgeOnly();
+        setTimeout(() => {
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }, 3000);
+      } catch (err) {
+        alert("Lỗi tải tệp về máy chủ: " + err.message);
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
       }
     });
   });
@@ -3476,6 +3523,74 @@ if (btnGdriveDownloadDirect) {
           }, i * 500);
         });
       }
+    }
+  });
+}
+
+// Download all files to server storage
+if (btnGdriveDownloadAllServer) {
+  btnGdriveDownloadAllServer.addEventListener("click", async () => {
+    const list = currentFilteredFiles.length > 0 ? currentFilteredFiles : (currentGDriveData?.files || []);
+    if (list.length === 0) {
+      alert("Không có tệp tin nào để tải về máy chủ.");
+      return;
+    }
+
+    const count = list.length;
+    const confirmMsg = count === 1
+      ? `Bạn có muốn đưa tệp "${list[0].name}" vào hàng đợi tải của máy chủ lưu trữ (/disk1/data/downloads) không?\nTệp sẽ tự động xuất hiện trong mục "Tệp Của Tôi".`
+      : `Bạn có muốn đưa toàn bộ ${count} tệp tin vào hàng đợi tải của máy chủ lưu trữ (/disk1/data/downloads) không?\nCác tệp sẽ được tải ngầm và xuất hiện trong mục "Tệp Của Tôi".`;
+
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    const origText = btnGdriveServerText ? btnGdriveServerText.innerText : "Tải Tất Cả Về Server";
+    if (btnGdriveServerText) btnGdriveServerText.innerText = `Đang gửi ${count} tệp...`;
+    btnGdriveDownloadAllServer.disabled = true;
+
+    try {
+      const items = list.map(f => ({
+        id: f.id,
+        name: f.name || "download_file",
+        url: getBestIDMUrl(f),
+        path: f.path || ""
+      }));
+
+      const resp = await fetch("/api/gdrive/download-all-to-server", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items })
+      });
+
+      const resData = await resp.json();
+      if (!resp.ok) {
+        throw new Error(resData.detail || "Lỗi khởi tạo tải về máy chủ.");
+      }
+
+      if (btnGdriveServerText) {
+        btnGdriveServerText.innerText = `✓ Đã Đưa ${resData.count} Tệp Vào Server!`;
+        btnGdriveDownloadAllServer.classList.remove("from-purple-600", "to-indigo-600");
+        btnGdriveDownloadAllServer.classList.add("from-emerald-600", "to-teal-600");
+      }
+
+      // Refresh files badge in the background
+      loadFilesBadgeOnly();
+
+      const goToFiles = confirm(`🎉 ${resData.message}\n\nBạn có muốn chuyển sang mục "Tệp Của Tôi" để theo dõi và quản lý tệp không?`);
+      if (goToFiles) {
+        switchTab("files");
+        loadFilesList();
+      }
+    } catch (e) {
+      alert("Lỗi tải về máy chủ: " + e.message);
+    } finally {
+      btnGdriveDownloadAllServer.disabled = false;
+      setTimeout(() => {
+        if (btnGdriveServerText) btnGdriveServerText.innerText = origText;
+        btnGdriveDownloadAllServer.classList.remove("from-emerald-600", "to-teal-600");
+        btnGdriveDownloadAllServer.classList.add("from-purple-600", "to-indigo-600");
+      }, 3500);
     }
   });
 }

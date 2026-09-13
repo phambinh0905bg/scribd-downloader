@@ -148,6 +148,13 @@ class DirectDownloadTask:
 class DirectDownloaderService:
     def __init__(self):
         self.tasks: Dict[str, DirectDownloadTask] = {}
+        self._semaphore: Optional[asyncio.Semaphore] = None
+
+    @property
+    def semaphore(self) -> asyncio.Semaphore:
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(3)
+        return self._semaphore
 
     def get_task(self, task_id: str) -> Optional[DirectDownloadTask]:
         return self.tasks.get(task_id)
@@ -294,101 +301,130 @@ class DirectDownloaderService:
         asyncio.create_task(self._process_download(task))
 
     async def _process_download(self, task: DirectDownloadTask):
-        task.update_progress("connecting", "Đang kết nối tới máy chủ tệp tin từ xa...", 0)
+        task.update_progress("queued", "Đang trong hàng đợi tải của máy chủ...", 0)
         
-        try:
-            validate_safe_url(task.raw_url)
-        except Exception as e:
-            task.fail_task(f"Lỗi bảo mật: {e}")
-            return
+        async with self.semaphore:
+            task.update_progress("connecting", "Đang kết nối tới máy chủ tệp tin từ xa...", 0)
+            
+            try:
+                validate_safe_url(task.raw_url)
+            except Exception as e:
+                task.fail_task(f"Lỗi bảo mật: {e}")
+                return
 
-        def run_stream_download():
-            session = requests.Session()
-            session.headers.update(DEFAULT_HEADERS)
-            
-            task.add_log(f"Đang gửi yêu cầu stream tới: {task.raw_url[:100]}...")
-            
-            with session.get(task.raw_url, stream=True, allow_redirects=True, timeout=30) as r:
+            def run_stream_download():
+                session = requests.Session()
+                session.headers.update(DEFAULT_HEADERS)
+                
+                target_url = task.raw_url
+                task.add_log(f"Đang gửi yêu cầu stream tới: {target_url[:100]}...")
+                
+                r = session.get(target_url, stream=True, allow_redirects=True, timeout=30)
                 r.raise_for_status()
                 
-                headers = dict(r.headers)
-                filename, total_bytes, content_type = self.extract_filename_and_size(task.raw_url, headers, r.url)
-                
-                task.total_bytes = total_bytes
-                task.content_type = content_type
-                
-                final_name = task.custom_filename or filename
-                task.clean_filename = self.sanitize_filename(final_name)
-                task.title = task.clean_filename
-                
-                total_mb_str = format_bytes_str(total_bytes)
-                task.add_log(f"Tên tệp tin: \"{task.clean_filename}\" | Kích thước: {total_mb_str}")
-                task.add_log(f"Loại dữ liệu (MIME): {task.content_type}")
-                
-                dest_path = task.task_dir / task.clean_filename
-                
-                downloaded = 0
-                start_time = time.time()
-                last_update = time.time()
-                last_downloaded = 0
-                
-                chunk_size = 512 * 1024  # 512KB chunks for smooth progress updates
-                
-                with open(dest_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=chunk_size):
-                        if not chunk:
-                            continue
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        task.downloaded_bytes = downloaded
-                        
-                        now = time.time()
-                        if now - last_update >= 0.25:
-                            duration = now - start_time
-                            interval_duration = now - last_update
-                            interval_bytes = downloaded - last_downloaded
-                            
-                            speed = interval_bytes / interval_duration if interval_duration > 0 else 0
-                            speed_mb = speed / (1024 * 1024)
-                            task.speed = f"{round(speed_mb, 1)} MB/s"
-                            
-                            cur_mb = round(downloaded / (1024 * 1024), 2)
-                            
-                            if total_bytes > 0:
-                                # Strict calculation based directly on downloaded bytes vs total bytes
-                                pct = min(99, int((downloaded / total_bytes) * 100))
-                                remaining_bytes = max(0, total_bytes - downloaded)
-                                eta_s = int(remaining_bytes / speed) if speed > 0 else 0
-                                task.eta = f"ETA: {eta_s}s"
-                                
-                                tot_mb = round(total_bytes / (1024 * 1024), 2)
-                                msg = f"Đang tải: {cur_mb} MB / {tot_mb} MB ({task.speed}) - {task.eta}"
-                            else:
-                                pct = min(95, max(1, int(duration * 2)))
-                                msg = f"Đang tải: {cur_mb} MB ({task.speed})"
-                                
-                            task.update_progress("downloading", msg, pct)
-                            last_update = now
-                            last_downloaded = downloaded
-                            
-                return dest_path
+                # Check if Google Drive returned virus warning confirmation HTML page
+                content_type_raw = r.headers.get("content-type", "")
+                if "text/html" in content_type_raw and ("drive.google.com" in r.url or "drive.usercontent.google.com" in r.url):
+                    task.add_log("Google Drive trả về trang xác nhận virus, đang tự động trích xuất token bypass...", level="warning")
+                    html_text = r.text
+                    form_inputs = dict(re.findall(r'<input\s+[^>]*name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']*)["\']', html_text))
+                    if not form_inputs:
+                        rev_inputs = re.findall(r'<input\s+[^>]*value=["\']([^"\']*)["\'][^>]*name=["\']([^"\']+)["\']', html_text)
+                        form_inputs = {k: v for v, k in rev_inputs}
+                    uuid_val = form_inputs.get("uuid", "").strip()
+                    at_val = form_inputs.get("at", "").strip()
+                    m_id = re.search(r'[?&]id=([-\w]{25,})', target_url) or re.search(r'[?&]id=([-\w]{25,})', r.url)
+                    if m_id and uuid_val:
+                        fid = m_id.group(1)
+                        target_url = f"https://drive.usercontent.google.com/download?id={fid}&export=download&confirm=t&uuid={uuid_val}"
+                        if at_val:
+                            target_url += f"&at={at_val}"
+                        r.close()
+                        task.add_log(f"Bypass token thành công, đang kết nối lại luồng tải...")
+                        r = session.get(target_url, stream=True, allow_redirects=True, timeout=30)
+                        r.raise_for_status()
 
-        try:
-            task.update_progress("downloading", "Bắt đầu tải luồng tệp tin...", 1)
-            final_path = await asyncio.to_thread(run_stream_download)
-            
-            task.file_path = final_path
-            task.file_size_bytes = final_path.stat().st_size
-            task.file_size_mb = round(task.file_size_bytes / (1024 * 1024), 2)
-            
-            size_display = format_bytes_str(task.file_size_bytes)
-            task.add_log(f"🎉 Tải tệp thành công: {task.clean_filename} (Dung lượng: {size_display})")
-            task.add_log(f"⏰ File đã được lưu trữ an toàn và sẽ tự động xóa sau {settings.CLEANUP_MINUTES} phút (5 giờ).")
-            task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({size_display}) đã sẵn sàng tải về.", 100)
-            
-        except Exception as e:
-            task.error_message = f"Lỗi tải tệp tin từ xa: {str(e)}"
-            task.add_log(f"Lỗi: {str(e)}", level="error")
-            task.update_progress("failed", task.error_message, 0)
+                try:
+                    headers = dict(r.headers)
+                    filename, total_bytes, content_type = self.extract_filename_and_size(target_url, headers, r.url)
+                    
+                    task.total_bytes = total_bytes
+                    task.content_type = content_type
+                    
+                    final_name = task.custom_filename or filename
+                    task.clean_filename = self.sanitize_filename(final_name)
+                    task.title = task.clean_filename
+                    
+                    total_mb_str = format_bytes_str(total_bytes)
+                    task.add_log(f"Tên tệp tin: \"{task.clean_filename}\" | Kích thước: {total_mb_str}")
+                    task.add_log(f"Loại dữ liệu (MIME): {task.content_type}")
+                    
+                    dest_path = task.task_dir / task.clean_filename
+                    
+                    downloaded = 0
+                    start_time = time.time()
+                    last_update = time.time()
+                    last_downloaded = 0
+                    
+                    chunk_size = 512 * 1024  # 512KB chunks for smooth progress updates
+                    
+                    with open(dest_path, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=chunk_size):
+                            if not chunk:
+                                continue
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            task.downloaded_bytes = downloaded
+                            
+                            now = time.time()
+                            if now - last_update >= 0.25:
+                                duration = now - start_time
+                                interval_duration = now - last_update
+                                interval_bytes = downloaded - last_downloaded
+                                
+                                speed = interval_bytes / interval_duration if interval_duration > 0 else 0
+                                speed_mb = speed / (1024 * 1024)
+                                task.speed = f"{round(speed_mb, 1)} MB/s"
+                                
+                                cur_mb = round(downloaded / (1024 * 1024), 2)
+                                
+                                if total_bytes > 0:
+                                    # Strict calculation based directly on downloaded bytes vs total bytes
+                                    pct = min(99, int((downloaded / total_bytes) * 100))
+                                    remaining_bytes = max(0, total_bytes - downloaded)
+                                    eta_s = int(remaining_bytes / speed) if speed > 0 else 0
+                                    task.eta = f"ETA: {eta_s}s"
+                                    
+                                    tot_mb = round(total_bytes / (1024 * 1024), 2)
+                                    msg = f"Đang tải: {cur_mb} MB / {tot_mb} MB ({task.speed}) - {task.eta}"
+                                else:
+                                    pct = min(95, max(1, int(duration * 2)))
+                                    msg = f"Đang tải: {cur_mb} MB ({task.speed})"
+                                    
+                                task.update_progress("downloading", msg, pct)
+                                last_update = now
+                                last_downloaded = downloaded
+                                
+                    return dest_path
+                finally:
+                    r.close()
+
+            try:
+                task.update_progress("downloading", "Bắt đầu tải luồng tệp tin...", 1)
+                final_path = await asyncio.to_thread(run_stream_download)
+                
+                task.file_path = final_path
+                task.file_size_bytes = final_path.stat().st_size
+                task.file_size_mb = round(task.file_size_bytes / (1024 * 1024), 2)
+                
+                size_display = format_bytes_str(task.file_size_bytes)
+                task.add_log(f"🎉 Tải tệp thành công: {task.clean_filename} (Dung lượng: {size_display})")
+                task.add_log(f"⏰ File đã được lưu trữ an toàn và sẽ tự động xóa sau {settings.CLEANUP_MINUTES} phút (5 giờ).")
+                task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({size_display}) đã sẵn sàng tải về.", 100)
+                
+            except Exception as e:
+                task.error_message = f"Lỗi tải tệp tin từ xa: {str(e)}"
+                task.add_log(f"Lỗi: {str(e)}", level="error")
+                task.update_progress("failed", task.error_message, 0)
 
 direct_downloader_service = DirectDownloaderService()
