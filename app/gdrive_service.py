@@ -133,48 +133,91 @@ class GDriveService:
     def make_uc_url(file_id: str) -> str:
         return f"https://drive.google.com/uc?export=download&id={file_id}"
 
+    def resolve_direct_download_url(self, file_id: str, kind: str = "file") -> Tuple[str, Optional[str], Optional[str]]:
+        """
+        Tự động bypass trang cảnh báo virus quét tệp dung lượng lớn (>100MB) của Google Drive.
+        Trích xuất UUID token và thông tin tên/kích thước file từ Google Drive.
+        Trả về (direct_download_url_with_uuid, resolved_file_name, resolved_file_size_str).
+        """
+        if kind in ("document", "spreadsheets", "presentation"):
+            return self.make_direct_download_url(file_id, kind), None, None
+
+        probe_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download"
+        file_name = None
+        file_size_str = None
+        uuid = None
+
+        try:
+            r = self.session.get(probe_url, timeout=12, stream=True)
+            ct = r.headers.get("content-type", "")
+
+            # Nếu Google trả về trực tiếp file (file nhỏ hoặc không qua trang cảnh báo)
+            if "text/html" not in ct:
+                cl = r.headers.get("content-length")
+                if cl and cl.isdigit():
+                    file_size_str = format_bytes_str(int(cl))
+                cd = r.headers.get("content-disposition", "")
+                fn_m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)["\']?', cd)
+                if fn_m:
+                    file_name = urllib.parse.unquote(fn_m.group(1).strip())
+                return f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t", file_name, file_size_str
+
+            # Nếu là trang cảnh báo quét virus của Google Drive
+            html_text = r.text
+            uuid_m = re.search(r'name=["\']uuid["\']\s+value=["\']([^"\']+)["\']', html_text) or re.search(r'value=["\']([^"\']+)["\']\s+name=["\']uuid["\']', html_text)
+            if uuid_m:
+                uuid = uuid_m.group(1).strip()
+
+            # Lấy tên file và kích thước hiển thị trong trang cảnh báo
+            # Ví dụ: <a href="...open?id=...">Tên tệp</a> (960M)
+            name_m = re.search(r'<a[^>]+href=["\'][^"\']*open\?id=[^"\']*["\'][^>]*>([^<]+)</a>(?:\s*\(([^)]+)\))?', html_text)
+            if name_m:
+                file_name = html.unescape(name_m.group(1)).strip()
+                if name_m.group(2):
+                    file_size_str = name_m.group(2).strip()
+            else:
+                # Tìm tiêu đề phụ
+                sub_m = re.search(r'<p class=["\']uc-warning-caption["\'][^>]*>.*?</p>', html_text, re.DOTALL)
+                if sub_m:
+                    fn_cand = re.search(r'<a[^>]*>([^<]+)</a>', sub_m.group(0))
+                    if fn_cand:
+                        file_name = html.unescape(fn_cand.group(1)).strip()
+        except Exception:
+            pass
+
+        if uuid:
+            final_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&uuid={uuid}"
+        else:
+            final_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t"
+
+        return final_url, file_name, file_size_str
+
     def get_single_file_info(self, file_id: str, kind: str = "file") -> Dict[str, Any]:
         """
-        Lấy thông tin và link tải trực tiếp cho một tệp tin đơn lẻ.
+        Lấy thông tin và link tải trực tiếp cho một tệp tin đơn lẻ, tự động giải quyết UUID để bypass virus warning.
         """
-        download_url = self.make_direct_download_url(file_id, kind)
+        direct_url, resolved_name, resolved_size = self.resolve_direct_download_url(file_id, kind)
         uc_url = self.make_uc_url(file_id)
         view_url = f"https://drive.google.com/file/d/{file_id}/view"
 
-        file_name = f"gdrive_file_{file_id}"
+        file_name = resolved_name or f"gdrive_file_{file_id}"
         size_bytes = 0
-        size_formatted = "Không xác định"
+        size_formatted = resolved_size or "Không xác định"
 
-        # Thử lấy tiêu đề từ trang view
-        try:
-            r = self.session.get(view_url, timeout=10)
-            if r.status_code == 200:
-                og_title_m = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
-                if og_title_m:
-                    file_name = html.unescape(og_title_m.group(1)).strip()
-                else:
-                    title_m = re.search(r'<title>(.*?)(?: - Google Drive)?</title>', r.text)
-                    if title_m:
-                        file_name = html.unescape(title_m.group(1)).strip()
-        except Exception:
-            pass
-
-        # Thử lấy kích thước file qua HEAD request đến download_url
-        try:
-            head_r = self.session.head(download_url, allow_redirects=True, timeout=8)
-            cl = head_r.headers.get("content-length")
-            if cl and cl.isdigit():
-                size_bytes = int(cl)
-                size_formatted = format_bytes_str(size_bytes)
-            
-            cd = head_r.headers.get("content-disposition", "")
-            fn_m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)["\']?', cd)
-            if fn_m:
-                cand_fn = urllib.parse.unquote(fn_m.group(1).strip())
-                if cand_fn and cand_fn != f"file_{file_id}":
-                    file_name = cand_fn
-        except Exception:
-            pass
+        # Nếu chưa có tên file, thử lấy từ trang view
+        if not resolved_name or file_name.startswith("gdrive_file_"):
+            try:
+                r = self.session.get(view_url, timeout=10)
+                if r.status_code == 200:
+                    og_title_m = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
+                    if og_title_m:
+                        file_name = html.unescape(og_title_m.group(1)).strip()
+                    else:
+                        title_m = re.search(r'<title>(.*?)(?: - Google Drive)?</title>', r.text)
+                        if title_m:
+                            file_name = html.unescape(title_m.group(1)).strip()
+            except Exception:
+                pass
 
         ext = file_name.split(".")[-1].lower() if "." in file_name else ""
         return {
@@ -186,7 +229,8 @@ class GDriveService:
             "extension": ext,
             "size_bytes": size_bytes,
             "size_formatted": size_formatted,
-            "download_url": download_url,
+            "download_url": direct_url,
+            "smart_url": f"/api/gdrive/download/{file_id}",
             "uc_url": uc_url,
             "view_url": view_url,
         }

@@ -83,6 +83,7 @@ async def auth_middleware(request: Request, call_next):
     if (
         not settings.AUTH_ENABLED
         or path.startswith("/static")
+        or path.startswith("/api/gdrive/download/")
         or path in ("/login", "/logout", "/favicon.ico")
     ):
         return await call_next(request)
@@ -489,6 +490,17 @@ async def export_gdrive_ef2(req: GDriveExportRequest):
         media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{fn}"'}
     )
+
+
+@app.get("/api/gdrive/download/{file_id}")
+async def gdrive_direct_download_redirect(file_id: str):
+    """
+    Tự động giải quyết UUID token để bypass cảnh báo virus quét tệp dung lượng lớn (>100MB)
+    và chuyển hướng 302 sang URL tải trực tiếp của Google Drive để IDM hoặc trình duyệt tải ngay.
+    """
+    from app.gdrive_service import gdrive_service
+    direct_url, _, _ = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    return RedirectResponse(url=direct_url, status_code=status.HTTP_302_FOUND)
 
 
 # --- UNIVERSAL STATUS & STREAMING ---

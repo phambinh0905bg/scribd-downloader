@@ -3329,7 +3329,7 @@ function renderGDriveResults(data) {
     if (data.files && data.files.length > 0) {
       btnGdriveDownloadDirect.classList.remove("hidden");
       const firstFile = data.files[0];
-      btnGdriveDownloadDirect.href = firstFile.download_url;
+      btnGdriveDownloadDirect.href = `/api/gdrive/download/${firstFile.id}`;
       btnGdriveDownloadDirect.setAttribute("download", firstFile.name || "download");
       if (btnGdriveDownloadText) {
         if (data.total_files === 1) {
@@ -3367,6 +3367,7 @@ function renderGDriveFilesTable(files) {
     const safeName = (f.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const safePath = (f.path || f.folder || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const safeUrl = f.download_url;
+    const dlUrl = `/api/gdrive/download/${f.id}`;
 
     return `
       <tr class="hover:bg-slate-800/40 transition-colors">
@@ -3383,11 +3384,11 @@ function renderGDriveFilesTable(files) {
         <td class="py-3 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
             <a 
-              href="${safeUrl}" 
+              href="${dlUrl}" 
               target="_blank" 
               download="${safeName}"
               class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[11px] font-bold transition-all shadow-sm shadow-emerald-600/20 flex items-center gap-1 cursor-pointer"
-              title="Tải trực tiếp tệp này về máy"
+              title="Tải trực tiếp tệp này về máy (Đã bypass cảnh báo virus)"
             >
               <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
               <span>Tải File</span>
@@ -3466,7 +3467,7 @@ if (btnGdriveDownloadDirect) {
         list.forEach((f, i) => {
           setTimeout(() => {
             const a = document.createElement("a");
-            a.href = f.download_url;
+            a.href = `/api/gdrive/download/${f.id}`;
             a.target = "_blank";
             a.download = f.name || "file";
             document.body.appendChild(a);
@@ -3479,6 +3480,14 @@ if (btnGdriveDownloadDirect) {
   });
 }
 
+// Get the best IDM download URL for a file
+function getBestIDMUrl(f) {
+  if (f.download_url && f.download_url.includes("uuid=")) {
+    return f.download_url;
+  }
+  return `${window.location.origin}/api/gdrive/download/${f.id}`;
+}
+
 // Copy all URLs for IDM
 if (btnGdriveCopyAll) {
   btnGdriveCopyAll.addEventListener("click", async () => {
@@ -3487,7 +3496,7 @@ if (btnGdriveCopyAll) {
       alert("Không có link nào để sao chép.");
       return;
     }
-    const textToCopy = list.map(f => f.download_url).join("\r\n");
+    const textToCopy = list.map(f => getBestIDMUrl(f)).join("\r\n");
     try {
       await navigator.clipboard.writeText(textToCopy);
       if (btnGdriveCopyText) {
@@ -3518,7 +3527,7 @@ if (btnGdriveExportTxt) {
       alert("Không có tệp nào để xuất danh sách.");
       return;
     }
-    const urls = list.map(f => f.download_url);
+    const urls = list.map(f => getBestIDMUrl(f));
     try {
       const resp = await fetch("/api/gdrive/export-txt", {
         method: "POST",
@@ -3551,7 +3560,7 @@ if (btnGdriveExportEf2) {
       alert("Không có tệp nào để xuất danh sách.");
       return;
     }
-    const urls = list.map(f => f.download_url);
+    const urls = list.map(f => getBestIDMUrl(f));
     try {
       const resp = await fetch("/api/gdrive/export-ef2", {
         method: "POST",
