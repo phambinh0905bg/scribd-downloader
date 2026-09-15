@@ -3287,7 +3287,15 @@ if (gdriveForm) {
         })
       });
 
-      const resData = await resp.json();
+      let resData;
+      const ct = resp.headers.get("content-type") || "";
+      if (ct.includes("application/json")) {
+        resData = await resp.json();
+      } else {
+        const rawText = await resp.text();
+        throw new Error(rawText.slice(0, 150) || `Máy chủ phản hồi mã lỗi HTTP ${resp.status}`);
+      }
+
       if (!resp.ok) {
         throw new Error(resData.detail || "Không thể quét thư mục Google Drive.");
       }

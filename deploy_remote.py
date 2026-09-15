@@ -140,6 +140,10 @@ def create_and_start_container():
             "DEVICE_SCALE_FACTOR=2.0"
         ],
         "HostConfig": {
+            "NetworkMode": "home-network",
+            "Binds": [
+                "/disk1/data/downloads:/app/downloads"
+            ],
             "PortBindings": {
                 "8000/tcp": [
                     {

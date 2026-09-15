@@ -1,4 +1,4 @@
-﻿import os
+import os
 import logging
 from pathlib import Path
 from sqlalchemy import create_engine
@@ -14,18 +14,24 @@ DATABASE_URL = os.environ.get(
 )
 
 # Connect with auto-reconnect and pooling
-try:
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_size=10,
-        max_overflow=20
-    )
-except Exception as e:
-    logger.warning(f"Lỗi khởi tạo PostgreSQL Engine ({e}). Fallback sang SQLite nội bộ...")
-    sqlite_path = settings.DATA_DIR / "scribd_hub_fallback.db"
-    engine = create_engine(f"sqlite:///{sqlite_path}", connect_args={"check_same_thread": False})
+def _init_engine():
+    try:
+        eng = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            pool_size=10,
+            max_overflow=20
+        )
+        # Test connection immediately
+        with eng.connect() as conn:
+            pass
+        return eng
+    except Exception as e:
+        logger.warning(f"Không thể kết nối PostgreSQL ({e}). Fallback sang SQLite nội bộ...")
+        sqlite_path = settings.DATA_DIR / "scribd_hub_fallback.db"
+        return create_engine(f"sqlite:///{sqlite_path}", connect_args={"check_same_thread": False})
 
+engine = _init_engine()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
