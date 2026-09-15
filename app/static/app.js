@@ -96,6 +96,7 @@ const gdriveAdvancedPanel = document.getElementById("gdrive-advanced-panel");
 const gdriveAdvancedIcon = document.getElementById("gdrive-advanced-icon");
 const gdriveMaxDepth = document.getElementById("gdrive-max-depth");
 const gdriveApiKey = document.getElementById("gdrive-api-key");
+const gdriveCookie = document.getElementById("gdrive-cookie");
 const gdriveResultCard = document.getElementById("gdrive-result-card");
 const gdriveResFolderName = document.getElementById("gdrive-res-folder-name");
 const gdriveResTotalFiles = document.getElementById("gdrive-res-total-files");
@@ -3266,6 +3267,7 @@ if (gdriveForm) {
 
     const maxDepth = parseInt((gdriveMaxDepth ? gdriveMaxDepth.value : "10") || "10", 10);
     const apiKey = gdriveApiKey ? gdriveApiKey.value.trim() : "";
+    const cookie = gdriveCookie ? gdriveCookie.value.trim() : "";
 
     // Show loading state
     if (btnGdriveSubmit) btnGdriveSubmit.disabled = true;
@@ -3280,7 +3282,8 @@ if (gdriveForm) {
         body: JSON.stringify({
           url: url,
           max_depth: maxDepth,
-          api_key: apiKey || null
+          api_key: apiKey || null,
+          cookie: cookie || null
         })
       });
 
@@ -3394,17 +3397,21 @@ function renderGDriveFilesTable(files) {
     const safeName = (f.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const safePath = (f.path || f.folder || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const idmUrl = getBestIDMUrl(f);
+    const isQuota = Boolean(f.quota_exceeded);
+    const viewUrl = f.view_url || `https://drive.google.com/file/d/${f.id}/view`;
 
     return `
-      <tr class="hover:bg-slate-800/40 transition-colors">
+      <tr class="hover:bg-slate-800/40 transition-colors ${isQuota ? 'bg-amber-950/10' : ''}">
         <td class="py-3 px-4 text-center text-slate-500 text-[11px] font-mono">${idx + 1}</td>
         <td class="py-3 px-4">
           <div class="flex items-center gap-2.5">
             ${icon}
             <div class="min-w-0">
-              <p class="font-medium text-slate-200 truncate max-w-sm sm:max-w-md md:max-w-lg" title="${safeName}">${safeName}</p>
+              <p class="font-medium ${isQuota ? 'text-amber-300' : 'text-slate-200'} truncate max-w-sm sm:max-w-md md:max-w-lg" title="${safeName}">${safeName}</p>
               <div class="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
-                <span>${f.size_formatted || "Không rõ kích thước"}</span>
+                ${isQuota 
+                  ? `<span class="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-sans font-bold flex items-center gap-1">⚠️ Giới hạn tải 24h (Quota Exceeded)</span>` 
+                  : `<span>${f.size_formatted || "Không rõ kích thước"}</span>`}
                 ${f.extension ? `<span>•</span><span class="uppercase">${f.extension}</span>` : ""}
               </div>
             </div>
@@ -3415,16 +3422,28 @@ function renderGDriveFilesTable(files) {
         </td>
         <td class="py-3 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
-            <a 
-              href="${idmUrl}" 
-              target="_blank" 
-              download="${safeName}"
-              class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[11px] font-bold transition-all shadow-sm shadow-emerald-600/20 flex items-center gap-1 cursor-pointer"
-              title="Tải trực tiếp tệp này về máy (Đã bypass cảnh báo virus)"
-            >
-              <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-              <span>Tải File</span>
-            </a>
+            ${isQuota ? `
+              <a 
+                href="${viewUrl}" 
+                target="_blank" 
+                class="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-[11px] font-bold transition-all shadow-sm shadow-amber-600/20 flex items-center gap-1 cursor-pointer"
+                title="Tệp đạt giới hạn 24h. Bấm để mở Drive gốc và chọn 'Tạo bản sao' (Make a copy) vào Drive của bạn để tải ngay"
+              >
+                <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                <span>Tạo Bản Sao (Drive)</span>
+              </a>
+            ` : `
+              <a 
+                href="${idmUrl}" 
+                target="_blank" 
+                download="${safeName}"
+                class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-[11px] font-bold transition-all shadow-sm shadow-emerald-600/20 flex items-center gap-1 cursor-pointer"
+                title="Tải trực tiếp tệp này về máy (Đã bypass cảnh báo virus)"
+              >
+                <svg class="w-3.5 h-3.5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Tải File</span>
+              </a>
+            `}
             <button 
               type="button" 
               class="btn-gdrive-copy-single px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-[11px] font-semibold transition-all border border-slate-700 flex items-center gap-1 cursor-pointer"

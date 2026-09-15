@@ -726,6 +726,19 @@
                   <p class="text-[11px] text-slate-400">Hệ thống quét tự động không cần key. Chỉ điền nếu thư mục cực lớn.</p>
                 </div>
               </div>
+              <div class="space-y-1.5 pt-2 border-t border-slate-800">
+                <label for="gdrive-cookie" class="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <span class="text-amber-400">🍪</span>
+                  <span>Google Drive Cookie (Tùy chọn - Bypass giới hạn Quota 24h)</span>
+                </label>
+                <input 
+                  type="password" 
+                  id="gdrive-cookie" 
+                  placeholder="Dán chuỗi Cookie từ trình duyệt (chứa SID, HSID, SSID...) nếu gặp lỗi Quota Exceeded" 
+                  class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 text-xs focus:ring-1 focus:ring-amber-500 outline-none font-mono"
+                >
+                <p class="text-[11px] text-slate-400">Nếu file báo "Quota exceeded" (Đạt giới hạn 24h), bạn có thể nhập Cookie tài khoản Google cá nhân để tải với hạn mức cao hơn.</p>
+              </div>
             </div>
           </div>
 

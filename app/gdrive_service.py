@@ -59,6 +59,14 @@ class GDriveService:
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
+        self._url_cache: Dict[str, Tuple[str, Optional[str], Optional[str], bool]] = {}
+
+    def set_cookie(self, cookie_str: Optional[str] = None):
+        """Cấu hình Cookie tài khoản Google để tải với hạn mức cao và bypass giới hạn nặc danh."""
+        if cookie_str and cookie_str.strip():
+            self.session.headers["Cookie"] = cookie_str.strip()
+        else:
+            self.session.headers.pop("Cookie", None)
 
     @staticmethod
     def parse_gdrive_url(url: str) -> Tuple[Optional[str], str]:
@@ -133,22 +141,33 @@ class GDriveService:
     def make_uc_url(file_id: str) -> str:
         return f"https://drive.google.com/uc?export=download&id={file_id}"
 
-    def resolve_direct_download_url(self, file_id: str, kind: str = "file") -> Tuple[str, Optional[str], Optional[str]]:
+    def resolve_direct_download_url(self, file_id: str, kind: str = "file", cookie: Optional[str] = None) -> Tuple[str, Optional[str], Optional[str], bool]:
         """
         Tự động bypass trang cảnh báo virus quét tệp dung lượng lớn (>100MB) của Google Drive.
         Trích xuất UUID token và thông tin tên/kích thước file từ Google Drive.
-        Trả về (direct_download_url_with_uuid, resolved_file_name, resolved_file_size_str).
+        Trả về (direct_download_url_with_uuid, resolved_file_name, resolved_file_size_str, is_quota_exceeded).
         """
         if kind in ("document", "spreadsheets", "presentation"):
-            return self.make_direct_download_url(file_id, kind), None, None
+            return self.make_direct_download_url(file_id, kind), None, None, False
+
+        cache_key = f"{file_id}_{kind}"
+        if not cookie and cache_key in self._url_cache:
+            return self._url_cache[cache_key]
 
         probe_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download"
         file_name = None
         file_size_str = None
         uuid = None
+        is_quota_exceeded = False
+
+        headers = dict(DEFAULT_HEADERS)
+        if cookie and cookie.strip():
+            headers["Cookie"] = cookie.strip()
+        elif "Cookie" in self.session.headers:
+            headers["Cookie"] = self.session.headers["Cookie"]
 
         try:
-            r = self.session.get(probe_url, timeout=12, stream=True)
+            r = self.session.get(probe_url, headers=headers, timeout=12, stream=True)
             ct = r.headers.get("content-type", "")
 
             # Nếu Google trả về trực tiếp file (file nhỏ hoặc không qua trang cảnh báo)
@@ -160,12 +179,16 @@ class GDriveService:
                 fn_m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^"\';]+)["\']?', cd)
                 if fn_m:
                     file_name = urllib.parse.unquote(fn_m.group(1).strip())
-                return f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t", file_name, file_size_str
+                res = (f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t", file_name, file_size_str, False)
+                self._url_cache[cache_key] = res
+                return res
 
-            # Nếu là trang cảnh báo quét virus của Google Drive
+            # Nếu trả về HTML: Kiểm tra Quota Exceeded hay Cảnh báo virus thông thường
             html_text = r.text
+            if "Quota exceeded" in html_text or "Too many users have viewed or downloaded" in html_text or "Google Drive - Quota exceeded" in html_text:
+                is_quota_exceeded = True
+
             form_inputs = dict(re.findall(r'<input\s+[^>]*name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']*)["\']', html_text))
-            # Fallback regex nếu value đứng trước name
             if not form_inputs:
                 rev_inputs = re.findall(r'<input\s+[^>]*value=["\']([^"\']*)["\'][^>]*name=["\']([^"\']+)["\']', html_text)
                 form_inputs = {k: v for v, k in rev_inputs}
@@ -174,14 +197,12 @@ class GDriveService:
             at_val = form_inputs.get("at", "").strip() or None
 
             # Lấy tên file và kích thước hiển thị trong trang cảnh báo
-            # Ví dụ: <a href="...open?id=...">Tên tệp</a> (960M)
             name_m = re.search(r'<a[^>]+href=["\'][^"\']*open\?id=[^"\']*["\'][^>]*>([^<]+)</a>(?:\s*\(([^)]+)\))?', html_text)
             if name_m:
                 file_name = html.unescape(name_m.group(1)).strip()
                 if name_m.group(2):
                     file_size_str = name_m.group(2).strip()
             else:
-                # Tìm tiêu đề phụ
                 sub_m = re.search(r'<p class=["\']uc-warning-caption["\'][^>]*>.*?</p>', html_text, re.DOTALL)
                 if sub_m:
                     fn_cand = re.search(r'<a[^>]*>([^<]+)</a>', sub_m.group(0))
@@ -197,25 +218,32 @@ class GDriveService:
             url_params.append(f"at={at_val}")
 
         final_url = f"https://drive.usercontent.google.com/download?{'&'.join(url_params)}"
+        res = (final_url, file_name, file_size_str, is_quota_exceeded)
+        if not is_quota_exceeded:
+            self._url_cache[cache_key] = res
+        return res
 
-        return final_url, file_name, file_size_str
-
-    def get_single_file_info(self, file_id: str, kind: str = "file") -> Dict[str, Any]:
+    def get_single_file_info(self, file_id: str, kind: str = "file", cookie: Optional[str] = None) -> Dict[str, Any]:
         """
         Lấy thông tin và link tải trực tiếp cho một tệp tin đơn lẻ, tự động giải quyết UUID để bypass virus warning.
         """
-        direct_url, resolved_name, resolved_size = self.resolve_direct_download_url(file_id, kind)
+        direct_url, resolved_name, resolved_size, is_quota = self.resolve_direct_download_url(file_id, kind, cookie=cookie)
         uc_url = self.make_uc_url(file_id)
         view_url = f"https://drive.google.com/file/d/{file_id}/view"
 
         file_name = resolved_name or f"gdrive_file_{file_id}"
         size_bytes = 0
-        size_formatted = resolved_size or "Không xác định"
+        size_formatted = resolved_size or ("⚠️ Đạt giới hạn 24h" if is_quota else "Không xác định")
 
         # Nếu chưa có tên file, thử lấy từ trang view
         if not resolved_name or file_name.startswith("gdrive_file_"):
             try:
-                r = self.session.get(view_url, timeout=10)
+                headers = dict(DEFAULT_HEADERS)
+                if cookie and cookie.strip():
+                    headers["Cookie"] = cookie.strip()
+                elif "Cookie" in self.session.headers:
+                    headers["Cookie"] = self.session.headers["Cookie"]
+                r = self.session.get(view_url, headers=headers, timeout=10)
                 if r.status_code == 200:
                     og_title_m = re.search(r'<meta property="og:title" content="([^"]+)"', r.text)
                     if og_title_m:
@@ -241,6 +269,7 @@ class GDriveService:
             "smart_url": f"/api/gdrive/download/{file_id}",
             "uc_url": uc_url,
             "view_url": view_url,
+            "quota_exceeded": is_quota
         }
 
     def _parse_folder_page(self, folder_id: str) -> Tuple[str, List[Dict[str, Any]], List[Tuple[str, str]]]:
@@ -318,61 +347,59 @@ class GDriveService:
         """
         Quét thư mục Google Drive sử dụng Google Drive API v3 chính thức (nếu có API Key).
         """
+        base_url = "https://www.googleapis.com/drive/v3/files"
         all_files: List[Dict[str, Any]] = []
-        visited_folders: Set[str] = set()
+
+        try:
+            r = requests.get(
+                f"{base_url}/{folder_id}",
+                params={"fields": "id, name, mimeType", "key": api_key},
+                timeout=12
+            )
+            root_info = r.json()
+            root_name = root_info.get("name", f"Folder_{folder_id}")
+        except Exception:
+            root_name = f"Folder_{folder_id}"
+
+        folder_queue: List[Tuple[str, str, int]] = [(folder_id, root_name, 0)]
+        visited: Set[str] = {folder_id}
         folder_count = 0
 
-        # Lấy tên thư mục gốc
-        root_name = f"Drive_Folder_{folder_id}"
-        try:
-            meta_url = f"https://www.googleapis.com/drive/v3/files/{folder_id}?fields=id,name&key={api_key}"
-            mr = self.session.get(meta_url, timeout=10)
-            if mr.status_code == 200:
-                root_name = mr.json().get("name", root_name)
-        except Exception:
-            pass
-
-        # Quét BFS/DFS các thư mục
-        queue: List[Tuple[str, str, int]] = [(folder_id, root_name, 0)]
-
-        while queue:
-            curr_id, curr_path, depth = queue.pop(0)
-            if curr_id in visited_folders or depth > max_depth:
+        while folder_queue:
+            curr_id, curr_path, depth = folder_queue.pop(0)
+            if depth > max_depth:
                 continue
-            visited_folders.add(curr_id)
 
             page_token = None
             while True:
                 params = {
                     "q": f"'{curr_id}' in parents and trashed = false",
-                    "fields": "nextPageToken, files(id, name, mimeType, size)",
-                    "pageSize": 1000,
-                    "key": api_key,
+                    "fields": "nextPageToken, files(id, name, mimeType, size, webViewLink, webContentLink)",
+                    "pageSize": 100,
+                    "key": api_key
                 }
                 if page_token:
                     params["pageToken"] = page_token
 
-                api_url = f"https://www.googleapis.com/drive/v3/files?{urllib.parse.urlencode(params)}"
-                res = self.session.get(api_url, timeout=15)
-                if res.status_code != 200:
+                resp = requests.get(base_url, params=params, timeout=15)
+                if resp.status_code != 200:
                     break
 
-                data = res.json()
-                items = data.get("files", [])
-
-                for item in items:
+                data = resp.json()
+                for item in data.get("files", []):
+                    f_id = item["id"]
+                    f_name = item["name"]
                     mime = item.get("mimeType", "")
-                    f_id = item.get("id")
-                    f_name = item.get("name")
 
                     if mime == "application/vnd.google-apps.folder":
-                        folder_count += 1
-                        if depth < max_depth:
-                            next_path = f"{curr_path} / {f_name}"
-                            queue.append((f_id, next_path, depth + 1))
+                        if f_id not in visited and depth < max_depth:
+                            visited.add(f_id)
+                            folder_count += 1
+                            folder_queue.append((f_id, f"{curr_path} / {f_name}", depth + 1))
                     else:
-                        size_bytes = int(item.get("size", 0)) if item.get("size") else 0
-                        size_fmt = format_bytes_str(size_bytes) if size_bytes > 0 else "Không xác định"
+                        size_bytes = int(item.get("size", 0))
+                        size_fmt = format_bytes_str(size_bytes) if size_bytes else "Không xác định"
+
                         kind = "file"
                         if "document" in mime:
                             kind = "document"
@@ -393,7 +420,8 @@ class GDriveService:
                             "size_formatted": size_fmt,
                             "download_url": self.make_direct_download_url(f_id, kind),
                             "uc_url": self.make_uc_url(f_id),
-                            "view_url": f"https://drive.google.com/file/d/{f_id}/view"
+                            "view_url": f"https://drive.google.com/file/d/{f_id}/view",
+                            "quota_exceeded": False
                         })
 
                 page_token = data.get("nextPageToken")
@@ -408,7 +436,7 @@ class GDriveService:
             "files": all_files
         }
 
-    def scan_folder(self, folder_id: str, api_key: Optional[str] = None, max_depth: int = 10) -> Dict[str, Any]:
+    def scan_folder(self, folder_id: str, api_key: Optional[str] = None, max_depth: int = 10, cookie: Optional[str] = None) -> Dict[str, Any]:
         """
         Quét đệ quy toàn bộ thư mục và các thư mục con lồng nhau (nested subfolders).
         Nếu có api_key thì dùng Drive API v3, ngược lại dùng embedded web view (hoàn toàn miễn phí, không cần key).
@@ -434,6 +462,7 @@ class GDriveService:
             f["folder"] = root_name
             f["size_bytes"] = 0
             f["size_formatted"] = "Không xác định"
+            f["quota_exceeded"] = False
             all_files.append(f)
 
         # Hàng đợi quét các thư mục con lồng nhau: [(subfolder_id, subfolder_path, depth)]
@@ -456,6 +485,7 @@ class GDriveService:
                     sf["folder"] = sub_path
                     sf["size_bytes"] = 0
                     sf["size_formatted"] = "Không xác định"
+                    sf["quota_exceeded"] = False
                     all_files.append(sf)
 
                 # Thêm các thư mục con tiếp theo nếu còn độ sâu
@@ -469,15 +499,19 @@ class GDriveService:
                 continue
 
         # Tự động giải quyết UUID token cho các tệp tin trong thư mục để bypass cảnh báo virus file lớn
+        # Dùng max 4 workers để tránh bị rate-limit Quota từ Google IP
         def _enrich_file(f):
             if f.get("kind") == "file":
                 try:
-                    direct_url, r_name, r_size = self.resolve_direct_download_url(f["id"], "file")
+                    direct_url, r_name, r_size, is_quota = self.resolve_direct_download_url(f["id"], "file", cookie=cookie)
                     f["download_url"] = direct_url
+                    f["quota_exceeded"] = is_quota
+                    if is_quota:
+                        f["size_formatted"] = "⚠️ Đạt giới hạn 24h"
+                    elif r_size:
+                        f["size_formatted"] = r_size
                     if r_name and not r_name.startswith("file_") and not r_name.startswith("gdrive_file_"):
                         f["name"] = r_name
-                    if r_size:
-                        f["size_formatted"] = r_size
                 except Exception:
                     pass
             f["smart_url"] = f"/api/gdrive/download/{f['id']}"
@@ -485,7 +519,8 @@ class GDriveService:
 
         if all_files:
             from concurrent.futures import ThreadPoolExecutor
-            max_w = min(10, max(2, len(all_files)))
+            # Giảm max_workers xuống tối đa 4 để tránh kích hoạt Google Drive Quota rate limit
+            max_w = min(4, max(1, len(all_files)))
             try:
                 with ThreadPoolExecutor(max_workers=max_w) as executor:
                     all_files = list(executor.map(_enrich_file, all_files))
@@ -500,7 +535,7 @@ class GDriveService:
             "files": all_files
         }
 
-    def scan_url(self, url: str, api_key: Optional[str] = None, max_depth: int = 10) -> Dict[str, Any]:
+    def scan_url(self, url: str, api_key: Optional[str] = None, max_depth: int = 10, cookie: Optional[str] = None) -> Dict[str, Any]:
         """
         Hàm tổng quát: Nhận vào link bất kỳ (Folder hoặc File), tự động nhận diện và quét.
         """
@@ -510,11 +545,11 @@ class GDriveService:
 
         if res_type == "folder":
             # Thư mục -> quét toàn bộ thư mục và nested folders
-            result = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth)
+            result = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth, cookie=cookie)
             # Nếu quét thư mục không ra file nào, thử kiểm tra xem có phải file đơn lẻ không
             if result.get("total_files", 0) == 0:
                 try:
-                    file_info = self.get_single_file_info(res_id, kind="file")
+                    file_info = self.get_single_file_info(res_id, kind="file", cookie=cookie)
                     if file_info and not file_info["name"].startswith("gdrive_file_"):
                         return {
                             "root_name": file_info["name"],
@@ -531,11 +566,11 @@ class GDriveService:
         else:
             # File đơn lẻ -> lấy thông tin file
             try:
-                file_info = self.get_single_file_info(res_id, kind=res_type)
+                file_info = self.get_single_file_info(res_id, kind=res_type, cookie=cookie)
             except Exception as e:
                 # Fallback thử quét như folder nếu lấy file thất bại
                 try:
-                    folder_res = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth)
+                    folder_res = self.scan_folder(res_id, api_key=api_key, max_depth=max_depth, cookie=cookie)
                     if folder_res.get("total_files", 0) > 0:
                         folder_res["resource_type"] = "folder"
                         return folder_res

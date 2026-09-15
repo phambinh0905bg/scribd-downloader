@@ -322,11 +322,15 @@ class DirectDownloaderService:
                 r = session.get(target_url, stream=True, allow_redirects=True, timeout=30)
                 r.raise_for_status()
                 
-                # Check if Google Drive returned virus warning confirmation HTML page
+                # Check if Google Drive returned virus warning confirmation HTML page or Quota Exceeded
                 content_type_raw = r.headers.get("content-type", "")
                 if "text/html" in content_type_raw and ("drive.google.com" in r.url or "drive.usercontent.google.com" in r.url):
-                    task.add_log("Google Drive trả về trang xác nhận virus, đang tự động trích xuất token bypass...", level="warning")
                     html_text = r.text
+                    if "Quota exceeded" in html_text or "Too many users" in html_text or "Google Drive - Quota exceeded" in html_text:
+                        r.close()
+                        raise ValueError("Tệp tin này hiện đã vượt quá giới hạn tải 24h của Google Drive (Quota Exceeded). Vui lòng 'Tạo bản sao' (Make a copy) vào Drive cá nhân hoặc thêm Cookie tài khoản Google.")
+
+                    task.add_log("Google Drive trả về trang xác nhận virus, đang tự động trích xuất token bypass...", level="warning")
                     form_inputs = dict(re.findall(r'<input\s+[^>]*name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']*)["\']', html_text))
                     if not form_inputs:
                         rev_inputs = re.findall(r'<input\s+[^>]*value=["\']([^"\']*)["\'][^>]*name=["\']([^"\']+)["\']', html_text)

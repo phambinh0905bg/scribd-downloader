@@ -149,6 +149,7 @@ class DirectDownloadRequest(BaseModel):
 class GDriveScanRequest(BaseModel):
     url: str
     api_key: Optional[str] = None
+    cookie: Optional[str] = None
     max_depth: Optional[int] = 10
 
 
@@ -485,7 +486,8 @@ async def scan_gdrive_endpoint(req: GDriveScanRequest, request: Request):
             gdrive_service.scan_url,
             url=url,
             api_key=req.api_key,
-            max_depth=req.max_depth or 10
+            max_depth=req.max_depth or 10,
+            cookie=req.cookie
         )
         return {"status": "success", "data": data}
     except Exception as e:
@@ -602,7 +604,12 @@ async def gdrive_direct_download_redirect(file_id: str, file_name: Optional[str]
     và chuyển hướng 302 sang URL tải trực tiếp của Google Drive để IDM hoặc trình duyệt tải ngay.
     """
     from app.gdrive_service import gdrive_service
-    direct_url, res_name, _ = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    direct_url, res_name, _, is_quota = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    if is_quota:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Tệp tin này hiện đã vượt quá giới hạn tải 24h của Google Drive (Quota Exceeded). Vui lòng 'Tạo bản sao' (Make a copy) vào Google Drive của bạn hoặc thêm Cookie Google Drive để tải."
+        )
     headers = {}
     if file_name or res_name:
         fn = file_name or res_name
@@ -621,6 +628,7 @@ async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, req
     Streaming proxy hoàn hảo cho IDM và Trình duyệt:
     1. Kiểm tra nếu file đã có trên server (/disk1/data/downloads) thì phục vụ bằng tốc độ mạng LAN nội bộ (Gigabit).
     2. Nếu chưa có trên server, server kết nối tới Google Drive với bypass token và stream trực tiếp về IDM với đầy đủ hỗ trợ HTTP Range (206 Partial Content), giúp IDM tải đa luồng mà KHÔNG BAO GIỜ bị dính trang cảnh báo virus HTML.
+    3. Nếu Google Drive trả về Quota Exceeded (giới hạn 24h), trả về HTTP 429 và thông báo cụ thể, TUYỆT ĐỐI KHÔNG stream file HTML rác về cho IDM.
     """
     from app.gdrive_service import gdrive_service
 
@@ -638,7 +646,13 @@ async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, req
                         return FileResponse(path=str(f), filename=f.name, media_type=media_type)
 
     # 2. Lấy link Google Drive với token bypass
-    direct_url, res_name, _ = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    direct_url, res_name, _, is_quota = await asyncio.to_thread(gdrive_service.resolve_direct_download_url, file_id)
+    if is_quota:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Tệp tin này hiện đã vượt quá giới hạn tải 24h của Google Drive (Quota Exceeded). Vui lòng 'Tạo bản sao' (Make a copy) vào Google Drive của bạn hoặc thêm Cookie Google Drive để tải."
+        )
+
     fn = file_name or res_name or f"file_{file_id}.bin"
     clean_ascii = re.sub(r'[^\x20-\x7E]', '_', fn)
     encoded_fn = urllib.parse.quote(fn)
@@ -652,18 +666,31 @@ async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, req
     if range_header:
         req_headers["Range"] = range_header
 
-    def stream_producer():
-        with requests.get(direct_url, headers=req_headers, stream=True, timeout=30) as r:
-            r.raise_for_status()
-            for chunk in r.iter_content(chunk_size=512 * 1024):
-                if chunk:
-                    yield chunk
+    # Kiểm tra trước (probe) phản hồi từ Google Drive
+    try:
+        probe_resp = requests.get(direct_url, headers=req_headers, stream=True, timeout=15)
+        probe_status = probe_resp.status_code
+        probe_ct = probe_resp.headers.get("content-type", "")
 
-    # Lấy thông tin header từ Google Drive
-    probe_resp = requests.get(direct_url, headers=req_headers, stream=True, timeout=15)
-    probe_status = probe_resp.status_code
-    probe_headers = dict(probe_resp.headers)
-    probe_resp.close()
+        # Nếu Google Drive trả về trang HTML, kiểm tra nếu là Quota Exceeded
+        if "text/html" in probe_ct:
+            sample_content = probe_resp.raw.read(4096, decode_content=True).decode("utf-8", errors="ignore")
+            probe_resp.close()
+            if "Quota exceeded" in sample_content or "Too many users" in sample_content or "Google Drive - Quota exceeded" in sample_content:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Tệp tin đã vượt quá giới hạn tải 24h của Google Drive (Quota Exceeded). Vui lòng tạo bản sao (Make a copy) vào Drive cá nhân hoặc thêm Cookie tài khoản Google."
+                )
+            # Nếu là trang HTML lỗi khác (ví dụ từ chối truy cập)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Google Drive không trả về luồng tệp tin nhị phân (trả về trang web HTML cảnh báo hoặc lỗi)."
+            )
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.error(f"[GDrive Proxy Probe Error] {ex}")
+        raise HTTPException(status_code=502, detail=f"Không thể kết nối đến máy chủ Google Drive: {ex}")
 
     resp_headers = {
         "Content-Disposition": cd_header,
@@ -675,8 +702,7 @@ async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, req
         resp_headers["Content-Length"] = probe_resp.headers.get("content-length")
 
     media_type = probe_resp.headers.get("content-type", "application/octet-stream")
-    if "text/html" in media_type:
-        media_type = "application/octet-stream"
+    probe_resp.close()
 
     if request and request.method == "HEAD":
         return Response(
@@ -685,6 +711,13 @@ async def gdrive_stream_proxy(file_id: str, file_name: Optional[str] = None, req
             media_type=media_type,
             headers=resp_headers
         )
+
+    def stream_producer():
+        with requests.get(direct_url, headers=req_headers, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            for chunk in r.iter_content(chunk_size=512 * 1024):
+                if chunk:
+                    yield chunk
 
     return StreamingResponse(
         stream_producer(),
