@@ -142,13 +142,18 @@ class ScribdDownloaderService:
                 return match.group(1)
         return None
 
-    def sanitize_filename(self, name: str) -> str:
+    def sanitize_filename(self, name: str, fallback_id: str = "") -> str:
         """Sanitize title for cross-platform filesystems."""
-        clean = re.sub(r'[\\/*?:"<>|]', "", name)
+        clean = re.sub(r'[\\/*?:"<>|\x00-\x1f]', "", name)
         clean = re.sub(r'\s+', "_", clean).strip(" ._-")
-        if not clean:
-            clean = "scribd_document"
-        return clean[:120]
+        if len(clean.encode("utf-8")) > 200:
+            while len(clean.encode("utf-8")) > 200 and len(clean) > 1:
+                clean = clean[:-1]
+            clean = clean.rstrip(" ._-")
+        clean = clean[:80]
+        if not clean and fallback_id:
+            clean = f"scribd_{fallback_id}"
+        return clean if clean else "scribd_document"
 
     def parse_pages_range(self, range_str: str, total_pages: int) -> List[int]:
         """Parse page range like 'all', '1-5', '1,3,7-10'."""
@@ -386,7 +391,7 @@ class ScribdDownloaderService:
                             raw_title = f"Scribd_Document_{doc_id}"
                         
                         task.title = raw_title
-                        safe_name = self.sanitize_filename(raw_title)
+                        safe_name = self.sanitize_filename(raw_title, fallback_id=task.task_id)
                         task.clean_filename = f"{safe_name}.pdf"
                         task.add_log(f"Tiêu đề tài liệu: \"{task.title}\"")
                         
@@ -568,15 +573,28 @@ class ScribdDownloaderService:
                                 task.update_progress("compiling", f"Đang tối ưu & ghép trang {b_end}/{total_imgs}...", pct)
                                 await asyncio.sleep(0.05)
                             
-                            # Real Pillow compile in worker thread
-                            await asyncio.to_thread(self._compile_pdf_thread, captured_images, output_pdf)
+                            # Pillow-based PDF compilation in worker thread
+                            def _pillow_compile_pdf(images_list, out_path):
+                                pil_images = []
+                                for img_path in images_list:
+                                    img = Image.open(img_path).convert("RGB")
+                                    pil_images.append(img)
+                                if pil_images:
+                                    first = pil_images[0]
+                                    rest = pil_images[1:]
+                                    first.save(str(out_path), "PDF", save_all=True, append_images=rest, resolution=150.0)
+                                    for im in pil_images:
+                                        im.close()
+
+                            await asyncio.to_thread(_pillow_compile_pdf, captured_images, output_pdf)
                             task.add_log("✅ Đã tạo file PDF thành công qua Pillow.")
                             pdf_created = True
                         
                         # Step 6: Cleanup Temp Images and Finalize
                         task.update_progress("compiling", "Đang dọn dẹp bộ nhớ đệm và tối ưu file...", 98)
                         task.add_log("Đang dọn dẹp các tệp ảnh tạm thời để giải phóng dung lượng...")
-                        self.cleanup_temp_images(task.temp_img_dir)
+                        if task.temp_img_dir.exists():
+                            shutil.rmtree(task.temp_img_dir, ignore_errors=True)
                         
                         task.pdf_path = output_pdf
                         task.pdf_size_bytes = output_pdf.stat().st_size
@@ -598,6 +616,28 @@ class ScribdDownloaderService:
                                 ))
                         except Exception as tg_err:
                             logger.warning(f"Lỗi gửi Telegram tự động: {tg_err}")
+
+                        # Persist completed task to Database
+                        try:
+                            from app.database import SessionLocal
+                            from app.models import DownloadTaskModel
+                            db = SessionLocal()
+                            try:
+                                t_model = DownloadTaskModel(
+                                    id=task.task_id,
+                                    task_type="scribd",
+                                    title=task.title,
+                                    url=task.raw_url,
+                                    status="completed",
+                                    filename=task.clean_filename,
+                                    file_size_mb=task.pdf_size_mb
+                                )
+                                db.merge(t_model)
+                                db.commit()
+                            finally:
+                                db.close()
+                        except Exception:
+                            pass
 
                         
                     except Exception as e:

@@ -23,10 +23,7 @@ const tabDirectM = document.getElementById("tab-direct-m");
 const tabFilesM = document.getElementById("tab-files-m");
 const tabToolsM = document.getElementById("tab-tools-m");
 
-const viewScribd = document.getElementById("view-scribd");
-const viewYouTube = document.getElementById("view-youtube");
-const viewFacebook = document.getElementById("view-facebook");
-const viewDirect = document.getElementById("view-direct");
+const viewDownloader = document.getElementById("view-downloader");
 const viewGDrive = document.getElementById("view-gdrive");
 const viewFiles = document.getElementById("view-files");
 const viewTools = document.getElementById("view-tools");
@@ -39,49 +36,45 @@ const progressSection = document.getElementById("progress-section");
 const resultSection = document.getElementById("result-section");
 const errorSection = document.getElementById("error-section");
 
-// Scribd Elements
-const scribdForm = document.getElementById("scribd-form");
-const scribdUrlInput = document.getElementById("scribd-url-input");
+// Unified Downloader Elements
+const unifiedForm = document.getElementById("unified-download-form");
+const unifiedUrlInput = document.getElementById("unified-url-input");
+const btnUnifiedPaste = document.getElementById("btn-unified-paste");
+const btnUnifiedSubmit = document.getElementById("btn-unified-submit");
+const btnUnifiedText = document.getElementById("btn-unified-text");
+const unifiedSubmitIcon = document.getElementById("unified-submit-icon");
+const detectedServiceBadge = document.getElementById("detected-service-badge");
+const unifiedUrlIcon = document.getElementById("unified-url-icon");
+
+// Dynamic Panels
+const panelOptionsScribd = document.getElementById("panel-options-scribd");
+const panelOptionsMedia = document.getElementById("panel-options-media");
+const panelOptionsDirect = document.getElementById("panel-options-direct");
+
+// Scribd Controls
 const scribdPagesInput = document.getElementById("scribd-pages-input");
-const btnScribdSubmit = document.getElementById("btn-scribd-submit");
-const btnScribdPaste = document.getElementById("btn-scribd-paste");
+const scribdEnableOcr = document.getElementById("scribd-enable-ocr");
+const scribdOcrOptions = document.getElementById("scribd-ocr-options");
+const scribdOcrLang = document.getElementById("scribd-ocr-lang");
 
-// YouTube Elements
-const ytForm = document.getElementById("youtube-form");
-const ytUrlInput = document.getElementById("yt-url-input");
-const btnYtSubmit = document.getElementById("btn-yt-submit");
-const btnYtPaste = document.getElementById("btn-yt-paste");
-const ytVideoQuality = document.getElementById("yt-video-quality");
-const ytAudioQuality = document.getElementById("yt-audio-quality");
-const ytPreviewCard = document.getElementById("yt-preview-card");
-const ytPreviewThumb = document.getElementById("yt-preview-thumb");
-const ytPreviewTitle = document.getElementById("yt-preview-title");
-const ytPreviewChannel = document.getElementById("yt-preview-channel");
-const ytPreviewDuration = document.getElementById("yt-preview-duration");
+// Media Controls (YouTube & Facebook & Socials)
+const mediaServiceName = document.getElementById("media-service-name");
+const mediaPreviewCard = document.getElementById("media-preview-card");
+const mediaPreviewThumb = document.getElementById("media-preview-thumb");
+const mediaPreviewDuration = document.getElementById("media-preview-duration");
+const mediaPreviewTitle = document.getElementById("media-preview-title");
+const mediaPreviewChannel = document.getElementById("media-preview-channel");
+const mediaVideoQuality = document.getElementById("media-video-quality");
+const mediaAudioQuality = document.getElementById("media-audio-quality");
+const mediaTrimStart = document.getElementById("media-trim-start");
+const mediaTrimEnd = document.getElementById("media-trim-end");
 
-// Facebook Elements
-const fbForm = document.getElementById("fb-form");
-const fbUrlInput = document.getElementById("fb-url-input");
-const btnFbSubmit = document.getElementById("btn-fb-submit");
-const btnFbPaste = document.getElementById("btn-fb-paste");
-const fbVideoQuality = document.getElementById("fb-video-quality");
-const fbAudioQuality = document.getElementById("fb-audio-quality");
-const fbPreviewCard = document.getElementById("fb-preview-card");
-const fbPreviewThumb = document.getElementById("fb-preview-thumb");
-const fbPreviewTitle = document.getElementById("fb-preview-title");
-const fbPreviewChannel = document.getElementById("fb-preview-channel");
-const fbPreviewDuration = document.getElementById("fb-preview-duration");
-
-// Direct Remote URL Elements
-const directForm = document.getElementById("direct-form");
-const directUrlInput = document.getElementById("direct-url-input");
-const directCustomName = document.getElementById("direct-custom-name");
-const btnDirectSubmit = document.getElementById("btn-direct-submit");
-const btnDirectPaste = document.getElementById("btn-direct-paste");
+// Direct Controls
 const directPreviewCard = document.getElementById("direct-preview-card");
 const directPreviewFilename = document.getElementById("direct-preview-filename");
 const directPreviewSize = document.getElementById("direct-preview-size");
 const directPreviewType = document.getElementById("direct-preview-type");
+const directCustomName = document.getElementById("direct-custom-name");
 
 // Google Drive Elements
 const gdriveForm = document.getElementById("gdrive-form");
@@ -178,48 +171,33 @@ function switchTab(tab) {
   }
 
   // Reset tab button styles (Desktop & Mobile)
-  [tabScribd, tabYouTube, tabFacebook, tabDirect, tabGDrive, tabFiles, tabTools, tabBarcode, tabAdmin, tabScribdM, tabYouTubeM, tabFacebookM, tabDirectM, tabFilesM, tabToolsM].forEach(btn => {
+  const allTabs = [
+    document.getElementById("tab-downloader"),
+    tabGDrive, tabFiles, tabTools, tabBarcode, tabAdmin,
+    tabFilesM, tabToolsM
+  ];
+  allTabs.forEach(btn => {
     if (btn) {
       btn.classList.remove("active");
       btn.classList.add("text-slate-400");
     }
   });
 
-  // Hide all views
-  viewScribd.classList.add("hidden");
-  viewYouTube.classList.add("hidden");
-  if (viewFacebook) viewFacebook.classList.add("hidden");
-  if (viewDirect) viewDirect.classList.add("hidden");
+  // Hide all main views
+  if (viewDownloader) viewDownloader.classList.add("hidden");
   if (viewGDrive) viewGDrive.classList.add("hidden");
   if (viewFiles) viewFiles.classList.add("hidden");
   if (viewTools) viewTools.classList.add("hidden");
   if (viewBarcode) viewBarcode.classList.add("hidden");
   if (viewAdmin) viewAdmin.classList.add("hidden");
 
-  if (tab === "scribd") {
-    if (tabScribd) { tabScribd.classList.add("active"); tabScribd.classList.remove("text-slate-400"); }
-    if (tabScribdM) { tabScribdM.classList.add("active"); tabScribdM.classList.remove("text-slate-400"); }
-    viewScribd.classList.remove("hidden");
-    step3Label.innerText = "Gỡ Mờ & Render";
-    scribdUrlInput.focus();
-  } else if (tab === "youtube") {
-    if (tabYouTube) { tabYouTube.classList.add("active"); tabYouTube.classList.remove("text-slate-400"); }
-    if (tabYouTubeM) { tabYouTubeM.classList.add("active"); tabYouTubeM.classList.remove("text-slate-400"); }
-    viewYouTube.classList.remove("hidden");
-    step3Label.innerText = "Tải Luồng Stream";
-    ytUrlInput.focus();
-  } else if (tab === "facebook") {
-    if (tabFacebook) { tabFacebook.classList.add("active"); tabFacebook.classList.remove("text-slate-400"); }
-    if (tabFacebookM) { tabFacebookM.classList.add("active"); tabFacebookM.classList.remove("text-slate-400"); }
-    if (viewFacebook) viewFacebook.classList.remove("hidden");
-    step3Label.innerText = "Tải Luồng Stream";
-    fbUrlInput.focus();
-  } else if (tab === "direct") {
-    if (tabDirect) { tabDirect.classList.add("active"); tabDirect.classList.remove("text-slate-400"); }
-    if (tabDirectM) { tabDirectM.classList.add("active"); tabDirectM.classList.remove("text-slate-400"); }
-    if (viewDirect) viewDirect.classList.remove("hidden");
-    step3Label.innerText = "Tải Stream Tệp";
-    directUrlInput.focus();
+  const tabDownloader = document.getElementById("tab-downloader");
+
+  if (tab === "downloader" || tab === "scribd" || tab === "youtube" || tab === "facebook" || tab === "direct") {
+    if (tabDownloader) { tabDownloader.classList.add("active"); tabDownloader.classList.remove("text-slate-400"); }
+    if (viewDownloader) viewDownloader.classList.remove("hidden");
+    step3Label.innerText = "Tải Luồng Dữ Liệu";
+    if (unifiedUrlInput) unifiedUrlInput.focus();
   } else if (tab === "gdrive") {
     if (tabGDrive) { tabGDrive.classList.add("active"); tabGDrive.classList.remove("text-slate-400"); }
     if (viewGDrive) viewGDrive.classList.remove("hidden");
@@ -245,130 +223,118 @@ function switchTab(tab) {
   }
 }
 
-if (tabScribd) tabScribd.addEventListener("click", () => switchTab("scribd"));
-if (tabYouTube) tabYouTube.addEventListener("click", () => switchTab("youtube"));
-if (tabFacebook) tabFacebook.addEventListener("click", () => switchTab("facebook"));
-if (tabDirect) tabDirect.addEventListener("click", () => switchTab("direct"));
+const tabDownloaderBtn = document.getElementById("tab-downloader");
+if (tabDownloaderBtn) tabDownloaderBtn.addEventListener("click", () => switchTab("downloader"));
 if (tabGDrive) tabGDrive.addEventListener("click", () => switchTab("gdrive"));
 if (tabFiles) tabFiles.addEventListener("click", () => switchTab("files"));
 if (tabTools) tabTools.addEventListener("click", () => switchTab("tools"));
 if (tabBarcode) tabBarcode.addEventListener("click", () => switchTab("barcode"));
 if (tabAdmin) tabAdmin.addEventListener("click", () => switchTab("admin"));
 
-
-if (tabScribdM) tabScribdM.addEventListener("click", () => switchTab("scribd"));
-if (tabYouTubeM) tabYouTubeM.addEventListener("click", () => switchTab("youtube"));
-if (tabFacebookM) tabFacebookM.addEventListener("click", () => switchTab("facebook"));
-if (tabDirectM) tabDirectM.addEventListener("click", () => switchTab("direct"));
 if (tabFilesM) tabFilesM.addEventListener("click", () => switchTab("files"));
 if (tabToolsM) tabToolsM.addEventListener("click", () => switchTab("tools"));
 
+// ==================== UNIFIED URL ROUTING & PREVIEW LOGIC ====================
 
-// ==================== CLIPBOARD PASTE HELPERS ====================
+function detectUrlType(url) {
+  if (!url) return null;
+  const lower = url.trim().toLowerCase();
+  if (lower.includes("scribd.com") || lower.includes("id.scribd.com")) return "scribd";
+  if (lower.includes("youtube.com") || lower.includes("youtu.be")) return "youtube";
+  if (lower.includes("facebook.com") || lower.includes("fb.watch") || lower.includes("tiktok.com") || lower.includes("instagram.com") || lower.includes("twitter.com") || lower.includes("x.com")) return "social";
+  if (lower.includes("drive.google.com") || lower.includes("drive.usercontent.google.com")) return "gdrive";
+  if (lower.startsWith("http://") || lower.startsWith("https://")) return "direct";
+  return null;
+}
 
-if (btnScribdPaste) {
-  btnScribdPaste.addEventListener("click", async () => {
+let unifiedInspectTimeout = null;
+
+function updateUnifiedUIForUrl(url) {
+  const type = detectUrlType(url);
+  currentMode = type || "direct";
+
+  // Hide all dynamic option panels first
+  if (panelOptionsScribd) panelOptionsScribd.classList.add("hidden");
+  if (panelOptionsMedia) panelOptionsMedia.classList.add("hidden");
+  if (panelOptionsDirect) panelOptionsDirect.classList.add("hidden");
+  if (detectedServiceBadge) detectedServiceBadge.classList.add("hidden");
+
+  if (!type) {
+    if (unifiedUrlIcon) unifiedUrlIcon.className = "w-5 h-5 text-indigo-400 transition-colors";
+    if (btnUnifiedText) btnUnifiedText.innerText = "Bắt Đầu Tải Về";
+    return;
+  }
+
+  // Show badge & specific panel
+  if (type === "scribd") {
+    if (detectedServiceBadge) {
+      detectedServiceBadge.innerText = "Scribd";
+      detectedServiceBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30";
+      detectedServiceBadge.classList.remove("hidden");
+    }
+    if (unifiedUrlIcon) unifiedUrlIcon.className = "w-5 h-5 text-blue-400 transition-colors";
+    if (panelOptionsScribd) panelOptionsScribd.classList.remove("hidden");
+    if (btnUnifiedText) btnUnifiedText.innerText = "Bắt Đầu Tải File PDF";
+  } else if (type === "youtube" || type === "social") {
+    const isYt = (type === "youtube");
+    if (detectedServiceBadge) {
+      detectedServiceBadge.innerText = isYt ? "YouTube" : "Social Media";
+      detectedServiceBadge.className = isYt 
+        ? "px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-red-500/20 text-red-300 border border-red-500/30"
+        : "px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-sky-500/20 text-sky-300 border border-sky-500/30";
+      detectedServiceBadge.classList.remove("hidden");
+    }
+    if (unifiedUrlIcon) unifiedUrlIcon.className = isYt ? "w-5 h-5 text-red-500 transition-colors" : "w-5 h-5 text-sky-400 transition-colors";
+    if (mediaServiceName) mediaServiceName.innerText = isYt ? "YouTube Video" : "Mạng Xã Hội";
+    if (panelOptionsMedia) panelOptionsMedia.classList.remove("hidden");
+    if (btnUnifiedText) btnUnifiedText.innerText = "Bắt Đầu Tải Video / Audio";
+
+    // Auto inspect
+    clearTimeout(unifiedInspectTimeout);
+    unifiedInspectTimeout = setTimeout(() => {
+      if (isYt) fetchYouTubePreview(url);
+      else fetchFacebookPreview(url);
+    }, 500);
+  } else if (type === "gdrive") {
+    switchTab("gdrive");
+    if (gdriveUrlInput) {
+      gdriveUrlInput.value = url;
+      gdriveUrlInput.focus();
+    }
+  } else if (type === "direct") {
+    if (detectedServiceBadge) {
+      detectedServiceBadge.innerText = "Direct File";
+      detectedServiceBadge.className = "px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+      detectedServiceBadge.classList.remove("hidden");
+    }
+    if (unifiedUrlIcon) unifiedUrlIcon.className = "w-5 h-5 text-emerald-400 transition-colors";
+    if (panelOptionsDirect) panelOptionsDirect.classList.remove("hidden");
+    if (btnUnifiedText) btnUnifiedText.innerText = "Bắt Đầu Kéo Tệp Về Máy Chủ";
+
+    clearTimeout(unifiedInspectTimeout);
+    unifiedInspectTimeout = setTimeout(() => {
+      fetchDirectPreview(url);
+    }, 600);
+  }
+}
+
+if (unifiedUrlInput) {
+  unifiedUrlInput.addEventListener("input", (e) => {
+    updateUnifiedUIForUrl(e.target.value.trim());
+  });
+}
+
+if (btnUnifiedPaste) {
+  btnUnifiedPaste.addEventListener("click", async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (text) {
-        scribdUrlInput.value = text.trim();
-        scribdUrlInput.focus();
+      if (text && unifiedUrlInput) {
+        unifiedUrlInput.value = text.trim();
+        unifiedUrlInput.focus();
+        updateUnifiedUIForUrl(text.trim());
       }
     } catch (err) {
       console.warn("Clipboard access denied", err);
-    }
-  });
-}
-
-if (btnYtPaste) {
-  btnYtPaste.addEventListener("click", async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        ytUrlInput.value = text.trim();
-        ytUrlInput.focus();
-        fetchYouTubePreview(text.trim());
-      }
-    } catch (err) {
-      console.warn("Clipboard access denied", err);
-    }
-  });
-}
-
-if (btnFbPaste) {
-  btnFbPaste.addEventListener("click", async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        fbUrlInput.value = text.trim();
-        fbUrlInput.focus();
-        fetchFacebookPreview(text.trim());
-      }
-    } catch (err) {
-      console.warn("Clipboard access denied", err);
-    }
-  });
-}
-
-if (btnDirectPaste) {
-  btnDirectPaste.addEventListener("click", async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        directUrlInput.value = text.trim();
-        directUrlInput.focus();
-        fetchDirectPreview(text.trim());
-      }
-    } catch (err) {
-      console.warn("Clipboard access denied", err);
-    }
-  });
-}
-
-// Auto-inspect YouTube Video info on URL change
-let ytInspectTimeout = null;
-if (ytUrlInput) {
-  ytUrlInput.addEventListener("input", (e) => {
-    clearTimeout(ytInspectTimeout);
-    const val = e.target.value.trim();
-    if (val.includes("youtube.com") || val.includes("youtu.be")) {
-      ytInspectTimeout = setTimeout(() => {
-        fetchYouTubePreview(val);
-      }, 500);
-    } else {
-      ytPreviewCard.classList.add("hidden");
-    }
-  });
-}
-
-// Auto-inspect Facebook Video info on URL change
-let fbInspectTimeout = null;
-if (fbUrlInput) {
-  fbUrlInput.addEventListener("input", (e) => {
-    clearTimeout(fbInspectTimeout);
-    const val = e.target.value.trim();
-    if (val.includes("facebook.com") || val.includes("fb.watch")) {
-      fbInspectTimeout = setTimeout(() => {
-        fetchFacebookPreview(val);
-      }, 500);
-    } else {
-      fbPreviewCard.classList.add("hidden");
-    }
-  });
-}
-
-// Auto-inspect Direct Remote URL info on URL change
-let directInspectTimeout = null;
-if (directUrlInput) {
-  directUrlInput.addEventListener("input", (e) => {
-    clearTimeout(directInspectTimeout);
-    const val = e.target.value.trim();
-    if (val.startsWith("http://") || val.startsWith("https://")) {
-      directInspectTimeout = setTimeout(() => {
-        fetchDirectPreview(val);
-      }, 600);
-    } else {
-      directPreviewCard.classList.add("hidden");
     }
   });
 }
@@ -384,31 +350,31 @@ async function fetchYouTubePreview(url) {
       const respData = await res.json();
       const data = respData.data;
       if (data) {
-        ytPreviewTitle.innerText = data.title || "Video YouTube";
-        ytPreviewChannel.innerText = data.uploader || "";
-        ytPreviewDuration.innerText = data.duration || "";
-        if (data.thumbnail) {
-          ytPreviewThumb.src = data.thumbnail;
+        if (mediaPreviewTitle) mediaPreviewTitle.innerText = data.title || "Video YouTube";
+        if (mediaPreviewChannel) mediaPreviewChannel.innerText = data.uploader || "";
+        if (mediaPreviewDuration) mediaPreviewDuration.innerText = data.duration || "";
+        if (mediaPreviewThumb && data.thumbnail) {
+          mediaPreviewThumb.src = data.thumbnail;
         }
-        ytPreviewCard.classList.remove("hidden");
+        if (mediaPreviewCard) mediaPreviewCard.classList.remove("hidden");
 
-        if (data.video_qualities && Array.isArray(data.video_qualities) && ytVideoQuality) {
-          ytVideoQuality.innerHTML = "";
+        if (data.video_qualities && Array.isArray(data.video_qualities) && mediaVideoQuality) {
+          mediaVideoQuality.innerHTML = "";
           data.video_qualities.forEach((q) => {
             const opt = document.createElement("option");
             opt.value = q.id;
             opt.innerText = q.label;
-            ytVideoQuality.appendChild(opt);
+            mediaVideoQuality.appendChild(opt);
           });
         }
 
-        if (data.audio_qualities && Array.isArray(data.audio_qualities) && ytAudioQuality) {
-          ytAudioQuality.innerHTML = "";
+        if (data.audio_qualities && Array.isArray(data.audio_qualities) && mediaAudioQuality) {
+          mediaAudioQuality.innerHTML = "";
           data.audio_qualities.forEach((q) => {
             const opt = document.createElement("option");
             opt.value = q.id;
             opt.innerText = `${q.label} ${q.note ? '(' + q.note + ')' : ''}`;
-            ytAudioQuality.appendChild(opt);
+            mediaAudioQuality.appendChild(opt);
           });
         }
       }
@@ -429,31 +395,31 @@ async function fetchFacebookPreview(url) {
       const respData = await res.json();
       const data = respData.data;
       if (data) {
-        fbPreviewTitle.innerText = data.title || "Video Facebook";
-        fbPreviewChannel.innerText = data.uploader || "Facebook User";
-        fbPreviewDuration.innerText = data.duration || "";
-        if (data.thumbnail) {
-          fbPreviewThumb.src = data.thumbnail;
+        if (mediaPreviewTitle) mediaPreviewTitle.innerText = data.title || "Video Facebook";
+        if (mediaPreviewChannel) mediaPreviewChannel.innerText = data.uploader || "Facebook User";
+        if (mediaPreviewDuration) mediaPreviewDuration.innerText = data.duration || "";
+        if (mediaPreviewThumb && data.thumbnail) {
+          mediaPreviewThumb.src = data.thumbnail;
         }
-        fbPreviewCard.classList.remove("hidden");
+        if (mediaPreviewCard) mediaPreviewCard.classList.remove("hidden");
 
-        if (data.video_qualities && Array.isArray(data.video_qualities) && fbVideoQuality) {
-          fbVideoQuality.innerHTML = "";
+        if (data.video_qualities && Array.isArray(data.video_qualities) && mediaVideoQuality) {
+          mediaVideoQuality.innerHTML = "";
           data.video_qualities.forEach((q) => {
             const opt = document.createElement("option");
             opt.value = q.id;
             opt.innerText = q.label;
-            fbVideoQuality.appendChild(opt);
+            mediaVideoQuality.appendChild(opt);
           });
         }
 
-        if (data.audio_qualities && Array.isArray(data.audio_qualities) && fbAudioQuality) {
-          fbAudioQuality.innerHTML = "";
+        if (data.audio_qualities && Array.isArray(data.audio_qualities) && mediaAudioQuality) {
+          mediaAudioQuality.innerHTML = "";
           data.audio_qualities.forEach((q) => {
             const opt = document.createElement("option");
             opt.value = q.id;
             opt.innerText = `${q.label} ${q.note ? '(' + q.note + ')' : ''}`;
-            fbAudioQuality.appendChild(opt);
+            mediaAudioQuality.appendChild(opt);
           });
         }
       }
@@ -474,10 +440,10 @@ async function fetchDirectPreview(url) {
       const respData = await res.json();
       const data = respData.data;
       if (data) {
-        directPreviewFilename.innerText = data.filename || "remote_file";
-        directPreviewSize.innerText = data.file_size_str || "--";
-        directPreviewType.innerText = data.content_type || "application/octet-stream";
-        directPreviewCard.classList.remove("hidden");
+        if (directPreviewFilename) directPreviewFilename.innerText = data.filename || "remote_file";
+        if (directPreviewSize) directPreviewSize.innerText = data.file_size_str || "--";
+        if (directPreviewType) directPreviewType.innerText = data.content_type || "application/octet-stream";
+        if (directPreviewCard) directPreviewCard.classList.remove("hidden");
       }
     }
   } catch (err) {
@@ -485,13 +451,7 @@ async function fetchDirectPreview(url) {
   }
 }
 
-// ==================== FORM SUBMISSION ====================
-
 // OCR Checkbox Toggle
-const scribdEnableOcr = document.getElementById("scribd-enable-ocr");
-const scribdOcrOptions = document.getElementById("scribd-ocr-options");
-const scribdOcrLang = document.getElementById("scribd-ocr-lang");
-
 if (scribdEnableOcr && scribdOcrOptions) {
   scribdEnableOcr.addEventListener("change", () => {
     if (scribdEnableOcr.checked) {
@@ -502,39 +462,68 @@ if (scribdEnableOcr && scribdOcrOptions) {
   });
 }
 
-// Scribd Submit
-if (scribdForm) {
-  scribdForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const url = scribdUrlInput.value.trim();
-    const pages = scribdPagesInput.value.trim() || "all";
-    const enableOcr = scribdEnableOcr ? scribdEnableOcr.checked : false;
-    const ocrLang = scribdOcrLang ? scribdOcrLang.value : "vie+eng";
+// ==================== UNIFIED FORM SUBMISSION ====================
 
+if (unifiedForm) {
+  unifiedForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = unifiedUrlInput ? unifiedUrlInput.value.trim() : "";
     if (!url) {
-      alert("Vui lòng nhập đường dẫn tài liệu Scribd!");
+      alert("Vui lòng nhập đường dẫn URL cần tải!");
+      return;
+    }
+
+    const type = detectUrlType(url);
+    if (!type) {
+      alert("Vui lòng nhập một đường dẫn hợp lệ (http:// hoặc https://)!");
       return;
     }
 
     resetUI();
-    setSubmitting(btnScribdSubmit, true, "Đang kết nối Scribd...");
+    setSubmitting(btnUnifiedSubmit, true, "Đang kết nối dịch vụ...");
     showProgressView();
 
     try {
-      const response = await fetch("/api/download", {
+      let endpoint = "/api/download";
+      let payload = { url };
+
+      if (type === "scribd") {
+        endpoint = "/api/download";
+        const pages = scribdPagesInput ? scribdPagesInput.value.trim() || "all" : "all";
+        const enableOcr = scribdEnableOcr ? scribdEnableOcr.checked : false;
+        const ocrLang = scribdOcrLang ? scribdOcrLang.value : "vie+eng";
+        payload = { url, pages, enable_ocr: enableOcr, ocr_lang: ocrLang };
+        step3Label.innerText = "Gỡ Mờ & Render";
+      } else if (type === "youtube") {
+        endpoint = "/api/youtube/download";
+        const formatType = document.querySelector('input[name="media-format-type"]:checked')?.value || "video";
+        const quality = formatType === "video" ? (mediaVideoQuality?.value || "best") : (mediaAudioQuality?.value || "m4a");
+        const trimStart = mediaTrimStart?.value.trim() || null;
+        const trimEnd = mediaTrimEnd?.value.trim() || null;
+        payload = { url, format_type: formatType, quality, section_start: trimStart, section_end: trimEnd };
+        step3Label.innerText = "Tải Luồng Stream";
+      } else if (type === "social") {
+        endpoint = "/api/facebook/download";
+        const formatType = document.querySelector('input[name="media-format-type"]:checked')?.value || "video";
+        const quality = formatType === "video" ? (mediaVideoQuality?.value || "best") : (mediaAudioQuality?.value || "m4a");
+        payload = { url, format_type: formatType, quality };
+        step3Label.innerText = "Tải Luồng Stream";
+      } else if (type === "direct") {
+        endpoint = "/api/direct/download";
+        const customFilename = directCustomName ? directCustomName.value.trim() : null;
+        payload = { url, custom_filename: customFilename };
+        step3Label.innerText = "Kéo Tệp Từ Xa";
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          url, 
-          pages,
-          enable_ocr: enableOcr,
-          ocr_lang: ocrLang
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải Scribd.");
+        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải về.");
       }
 
       currentTaskId = data.task_id;
@@ -542,123 +531,7 @@ if (scribdForm) {
     } catch (err) {
       showErrorView(err.message);
     } finally {
-      setSubmitting(btnScribdSubmit, false, "Bắt Đầu Tải File PDF");
-    }
-  });
-}
-
-// YouTube Submit
-if (ytForm) {
-  ytForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const url = ytUrlInput.value.trim();
-    const formatType = document.querySelector('input[name="yt-format-type"]:checked')?.value || "video";
-    const quality = formatType === "video" ? ytVideoQuality.value : ytAudioQuality.value;
-
-    if (!url) {
-      alert("Vui lòng nhập URL video YouTube!");
-      return;
-    }
-
-    resetUI();
-    setSubmitting(btnYtSubmit, true, "Đang phân tích YouTube...");
-    showProgressView();
-
-    try {
-      const response = await fetch("/api/youtube/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, format_type: formatType, quality })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải YouTube.");
-      }
-
-      currentTaskId = data.task_id;
-      startTrackingProgress(currentTaskId);
-    } catch (err) {
-      showErrorView(err.message);
-    } finally {
-      setSubmitting(btnYtSubmit, false, "Bắt Đầu Tải Video / Audio");
-    }
-  });
-}
-
-// Facebook Submit
-if (fbForm) {
-  fbForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const url = fbUrlInput.value.trim();
-    const formatType = document.querySelector('input[name="fb-format-type"]:checked')?.value || "video";
-    const quality = formatType === "video" ? fbVideoQuality.value : fbAudioQuality.value;
-
-    if (!url) {
-      alert("Vui lòng nhập URL video Facebook!");
-      return;
-    }
-
-    resetUI();
-    setSubmitting(btnFbSubmit, true, "Đang phân tích Facebook...");
-    showProgressView();
-
-    try {
-      const response = await fetch("/api/facebook/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, format_type: formatType, quality })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải Facebook.");
-      }
-
-      currentTaskId = data.task_id;
-      startTrackingProgress(currentTaskId);
-    } catch (err) {
-      showErrorView(err.message);
-    } finally {
-      setSubmitting(btnFbSubmit, false, "Bắt Đầu Tải Video Facebook");
-    }
-  });
-}
-
-// Direct Remote URL Submit
-if (directForm) {
-  directForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const url = directUrlInput.value.trim();
-    const customFilename = directCustomName ? directCustomName.value.trim() : null;
-
-    if (!url) {
-      alert("Vui lòng nhập đường dẫn URL tệp tin!");
-      return;
-    }
-
-    resetUI();
-    setSubmitting(btnDirectSubmit, true, "Đang kết nối máy chủ tệp tin...");
-    showProgressView();
-
-    try {
-      const response = await fetch("/api/direct/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, custom_filename: customFilename })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Không thể khởi tạo tác vụ tải tệp tin từ xa.");
-      }
-
-      currentTaskId = data.task_id;
-      startTrackingProgress(currentTaskId);
-    } catch (err) {
-      showErrorView(err.message);
-    } finally {
-      setSubmitting(btnDirectSubmit, false, "Bắt Đầu Tải Tệp Về Máy Chủ");
+      setSubmitting(btnUnifiedSubmit, false, "Bắt Đầu Tải Về");
     }
   });
 }
@@ -668,7 +541,7 @@ function setSubmitting(button, isSubmitting, label) {
     button.disabled = isSubmitting;
     button.innerHTML = isSubmitting
       ? `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <span>${label}</span>`
-      : `<span>${label}</span>`;
+      : `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> <span>${label}</span>`;
   }
 }
 
@@ -817,14 +690,8 @@ if (btnReset) {
 if (btnRetry) {
   btnRetry.addEventListener("click", () => {
     errorSection.classList.add("hidden");
-    if (currentMode === "scribd") {
-      scribdForm.dispatchEvent(new Event("submit"));
-    } else if (currentMode === "youtube") {
-      ytForm.dispatchEvent(new Event("submit"));
-    } else if (currentMode === "facebook") {
-      fbForm.dispatchEvent(new Event("submit"));
-    } else if (currentMode === "direct") {
-      directForm.dispatchEvent(new Event("submit"));
+    if (unifiedForm) {
+      unifiedForm.dispatchEvent(new Event("submit"));
     }
   });
 }

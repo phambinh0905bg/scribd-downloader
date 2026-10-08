@@ -8,7 +8,7 @@ import shutil
 
 from pathlib import Path
 from app.downloader import downloader_service
-from app.cleanup import cleanup_expired_files, get_dir_size, get_storage_stats
+from app.cleanup import cleanup_expired_and_abandoned_files, get_dir_size, get_storage_stats
 from app.config import settings
 
 def test_url_extraction():
@@ -57,7 +57,7 @@ def test_cleanup_mechanism():
     print(f"  Storage before cleanup: {stats_before['total_items']} items, {stats_before['total_size_bytes']} bytes")
     
     # Run cleanup with 30 min max age
-    result = cleanup_expired_files(max_age_minutes=30)
+    result = cleanup_expired_and_abandoned_files(max_age_minutes=30)
     print(f"  Cleanup result: deleted folders: {result['deleted_folders']}, freed bytes: {result['freed_bytes']}")
     
     assert not test_dir.exists(), "Expired test directory was not cleaned up!"

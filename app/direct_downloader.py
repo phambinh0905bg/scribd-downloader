@@ -159,11 +159,18 @@ class DirectDownloaderService:
     def get_task(self, task_id: str) -> Optional[DirectDownloadTask]:
         return self.tasks.get(task_id)
 
-    def sanitize_filename(self, filename: str) -> str:
+    def sanitize_filename(self, filename: str, fallback_id: str = "") -> str:
         clean = urllib.parse.unquote(filename)
-        clean = re.sub(r'[\\/*?:"<>|]', "_", clean)
-        clean = re.sub(r'\s+', " ", clean).strip()
-        return clean[:150] if clean else "downloaded_file"
+        clean = re.sub(r'[\\/*?:"<>|\x00-\x1f]', "_", clean)
+        clean = re.sub(r'\s+', " ", clean).strip(" ._-")
+        if len(clean.encode("utf-8")) > 200:
+            while len(clean.encode("utf-8")) > 200 and len(clean) > 1:
+                clean = clean[:-1]
+            clean = clean.rstrip(" ._-")
+        clean = clean[:80]
+        if not clean and fallback_id:
+            clean = f"file_{fallback_id}"
+        return clean if clean else "downloaded_file"
 
     def extract_filename_and_size(self, url: str, headers: Dict[str, str], final_url: Optional[str] = None) -> tuple[str, int, str]:
         """Robust parser for filename, total bytes, and MIME content-type from headers and URL"""
@@ -309,7 +316,9 @@ class DirectDownloaderService:
             try:
                 validate_safe_url(task.raw_url)
             except Exception as e:
-                task.fail_task(f"Lỗi bảo mật: {e}")
+                task.error_message = f"Lỗi bảo mật: {e}"
+                task.add_log(f"Lỗi bảo mật: {e}", level="error")
+                task.update_progress("failed", f"Lỗi bảo mật: {e}", 0)
                 return
 
             def run_stream_download():
@@ -356,7 +365,7 @@ class DirectDownloaderService:
                     task.content_type = content_type
                     
                     final_name = task.custom_filename or filename
-                    task.clean_filename = self.sanitize_filename(final_name)
+                    task.clean_filename = self.sanitize_filename(final_name, fallback_id=task.task_id)
                     task.title = task.clean_filename
                     
                     total_mb_str = format_bytes_str(total_bytes)
@@ -425,6 +434,41 @@ class DirectDownloaderService:
                 task.add_log(f"🎉 Tải tệp thành công: {task.clean_filename} (Dung lượng: {size_display})")
                 task.add_log(f"⏰ File đã được lưu trữ an toàn và sẽ tự động xóa sau {settings.CLEANUP_MINUTES} phút (5 giờ).")
                 task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({size_display}) đã sẵn sàng tải về.", 100)
+
+                # Auto-send to Telegram if enabled
+                try:
+                    from app.telegram_bot import get_telegram_config, send_telegram_file
+                    cfg = get_telegram_config()
+                    if cfg.get("auto_send_enabled") and cfg.get("bot_token") and cfg.get("chat_id"):
+                        task.add_log("📲 Đang tự động gửi tệp về Telegram...")
+                        asyncio.create_task(send_telegram_file(
+                            final_path,
+                            caption=f"📦 {task.clean_filename}\n💾 {size_display}"
+                        ))
+                except Exception as tg_err:
+                    logger.warning(f"Lỗi gửi Telegram tự động: {tg_err}")
+
+                # Persist completed task to Database
+                try:
+                    from app.database import SessionLocal
+                    from app.models import DownloadTaskModel
+                    db = SessionLocal()
+                    try:
+                        t_model = DownloadTaskModel(
+                            id=task.task_id,
+                            task_type="direct",
+                            title=task.clean_filename,
+                            url=task.raw_url,
+                            status="completed",
+                            filename=task.clean_filename,
+                            file_size_mb=task.file_size_mb
+                        )
+                        db.merge(t_model)
+                        db.commit()
+                    finally:
+                        db.close()
+                except Exception:
+                    pass
                 
             except Exception as e:
                 task.error_message = f"Lỗi tải tệp tin từ xa: {str(e)}"

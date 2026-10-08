@@ -137,10 +137,21 @@ class FacebookDownloaderService:
     def get_task(self, task_id: str) -> Optional[FacebookTask]:
         return self.tasks.get(task_id)
 
-    def sanitize_filename(self, filename: str) -> str:
-        clean = re.sub(r'[\\/*?:"<>|]', "", filename)
+    def sanitize_filename(self, filename: str, task_id: str = "") -> str:
+        """Sanitize filename: remove illegal chars, collapse whitespace, limit length.
+        Falls back to task_id-based name if result is empty or still too long."""
+        clean = re.sub(r'[\\/*?:"<>|\x00-\x1f]', "", filename)
         clean = re.sub(r'\s+', " ", clean).strip()
-        return clean[:120] if clean else "facebook_media"
+        # Limit to 80 chars to stay well under the 255-byte filesystem limit
+        # even with multi-byte UTF-8 characters
+        if len(clean.encode("utf-8")) > 200:
+            while len(clean.encode("utf-8")) > 200 and len(clean) > 1:
+                clean = clean[:-1]
+            clean = clean.rstrip()
+        clean = clean[:80]
+        if not clean and task_id:
+            clean = f"facebook_{task_id}"
+        return clean if clean else "facebook_media"
 
     def format_duration(self, seconds: Any) -> str:
         if not seconds:
@@ -201,10 +212,10 @@ class FacebookDownloaderService:
                 ])
                 
             audio_options = [
+                {"id": "m4a", "label": "⚡ M4A / AAC (Bản gốc - Siêu tốc, không phải chờ chuyển mã)", "note": "Siêu nhanh"},
                 {"id": "320k", "label": "MP3 - 320 kbps (Chất lượng cao)", "note": "Siêu nét"},
                 {"id": "192k", "label": "MP3 - 192 kbps (Tiêu chuẩn)", "note": "Khuyến nghị"},
-                {"id": "128k", "label": "MP3 - 128 kbps (Nhẹ)", "note": "Tiết kiệm dung lượng"},
-                {"id": "m4a", "label": "M4A / AAC (Bản gốc)", "note": "Không nén lại"}
+                {"id": "128k", "label": "MP3 - 128 kbps (Nhẹ)", "note": "Tiết kiệm dung lượng"}
             ]
             
             return {
@@ -303,7 +314,7 @@ class FacebookDownloaderService:
             if not yt_dlp:
                 raise RuntimeError("yt-dlp không được cài đặt.")
                 
-            outtmpl = str(task.task_dir / "%(title)s.%(ext)s")
+            outtmpl = str(task.task_dir / f"{task.task_id}.%(ext)s")
             custom_logger = FbCustomLogger(task)
             
             ydl_opts: Dict[str, Any] = {
@@ -335,10 +346,12 @@ class FacebookDownloaderService:
                 audio_quality = quality_map.get(task.quality, "192")
                 
                 if task.quality == "m4a":
+                    task.add_log("⚡ Chọn định dạng M4A: Trích xuất trực tiếp bản gốc, không cần re-encode CPU!")
                     ydl_opts.update({
                         "format": "bestaudio[ext=m4a]/bestaudio/best",
                     })
                 else:
+                    task.add_log("⏳ Đang chuẩn bị chuyển đổi sang MP3 bằng FFmpeg đa luồng...")
                     ydl_opts.update({
                         "format": "bestaudio/best",
                         "postprocessors": [{
@@ -346,6 +359,12 @@ class FacebookDownloaderService:
                             "preferredcodec": "mp3",
                             "preferredquality": audio_quality,
                         }],
+                        "postprocessor_args": {
+                            "FFmpegExtractAudio": [
+                                "-threads", "0",
+                                "-compression_level", "0"
+                            ]
+                        }
                     })
             else:
                 # Video format
@@ -392,13 +411,20 @@ class FacebookDownloaderService:
                 
             final_file = max(downloaded_files, key=lambda f: f.stat().st_size)
             
-            safe_name = self.sanitize_filename(task.title)
+            safe_name = self.sanitize_filename(task.title, task_id=task.task_id)
             ext = final_file.suffix
             safe_filename = f"{safe_name}{ext}"
             
+            # Rename to human-friendly name; fallback to task_id name if rename fails
             final_dest = task.task_dir / safe_filename
             if final_file != final_dest:
-                final_file.rename(final_dest)
+                try:
+                    final_file.rename(final_dest)
+                except OSError as rename_err:
+                    # If rename still fails (e.g. edge-case encoding), keep task_id filename
+                    task.add_log(f"⚠️ Không thể đổi tên file ({rename_err}), giữ nguyên tên gốc.", level="warning")
+                    final_dest = final_file
+                    safe_filename = final_file.name
                 
             task.file_path = final_dest
             task.clean_filename = safe_filename
@@ -408,6 +434,41 @@ class FacebookDownloaderService:
             task.add_log(f"🎉 Tải & Xử lý Facebook thành công: {task.clean_filename} (Dung lượng: {task.file_size_mb} MB)")
             task.add_log(f"⏰ File sẽ tự động lưu trữ và xóa sau {settings.CLEANUP_MINUTES} phút.")
             task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({task.file_size_mb} MB) đã sẵn sàng.", 100)
+
+            # Auto-send to Telegram if enabled
+            try:
+                from app.telegram_bot import get_telegram_config, send_telegram_file
+                cfg = get_telegram_config()
+                if cfg.get("auto_send_enabled") and cfg.get("bot_token") and cfg.get("chat_id"):
+                    task.add_log("📲 Đang tự động gửi tệp về Telegram...")
+                    asyncio.create_task(send_telegram_file(
+                        final_dest,
+                        caption=f"📱 {task.title}\n👤 {task.uploader}\n💾 {task.file_size_mb} MB"
+                    ))
+            except Exception as tg_err:
+                logger.warning(f"Lỗi gửi Telegram tự động: {tg_err}")
+
+            # Persist completed task to Database
+            try:
+                from app.database import SessionLocal
+                from app.models import DownloadTaskModel
+                db = SessionLocal()
+                try:
+                    t_model = DownloadTaskModel(
+                        id=task.task_id,
+                        task_type="facebook",
+                        title=task.title,
+                        url=task.raw_url,
+                        status="completed",
+                        filename=task.clean_filename,
+                        file_size_mb=task.file_size_mb
+                    )
+                    db.merge(t_model)
+                    db.commit()
+                finally:
+                    db.close()
+            except Exception:
+                pass
             
         except Exception as e:
             task.error_message = f"Lỗi tải Facebook: {str(e)}"
@@ -415,4 +476,3 @@ class FacebookDownloaderService:
             task.update_progress("failed", task.error_message, 0)
 
 facebook_service = FacebookDownloaderService()
-

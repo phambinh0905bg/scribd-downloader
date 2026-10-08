@@ -13,28 +13,37 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
 
 # Configurations
-def get_env_var(key: str, default: str = "") -> str:
-    val = os.environ.get(key)
-    if val:
-        return val
-    # Fallback to hermes .env if exists
-    hermes_env = Path(os.environ.get("LOCALAPPDATA", "")) / "hermes" / ".env"
-    if hermes_env.exists():
+def get_env_var(keys, default: str = "") -> str:
+    if isinstance(keys, str):
+        keys = [keys]
+    for key in keys:
+        val = os.environ.get(key)
+        if val:
+            return val
+    # Fallback to local .env
+    local_env = Path(__file__).resolve().parent / ".env"
+    if local_env.exists():
         try:
-            with open(hermes_env, "r", encoding="utf-8", errors="ignore") as f:
+            with open(local_env, "r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
-                    if line.strip().startswith(f"{key}="):
-                        return line.strip().split("=", 1)[1].strip()
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip('"').strip("'")
+                    if k in keys and v:
+                        return v
         except Exception:
             pass
     return default
 
-PORTAINER_URL = os.environ.get("PORTAINER_URL", "http://192.168.1.250:9000")
-PORTAINER_TOKEN = get_env_var("HOME_PORTAINER_TOKEN")
-ENDPOINT_ID = os.environ.get("PORTAINER_ENDPOINT_ID", "3")
+PORTAINER_URL = get_env_var(["PORTAINER_API_URL", "PORTAINER_URL"], "http://192.168.1.250:9000")
+PORTAINER_TOKEN = get_env_var(["PORTAINER_TOKEN", "HOME_PORTAINER_TOKEN"])
+ENDPOINT_ID = get_env_var("PORTAINER_ENDPOINT_ID", "3")
 
-GH_USERNAME = os.environ.get("GH_USERNAME", "phambinh0905bg")
-GH_TOKEN = get_env_var("GH_TOKEN", get_env_var("GITHUB_TOKEN"))
+GH_USERNAME = get_env_var("GH_USERNAME", "phambinh0905bg")
+GH_TOKEN = get_env_var(["GH_TOKEN", "GITHUB_TOKEN"])
 REGISTRY_HOST = "ghcr.io"
 APP_VERSION = "2.3.4"
 IMAGE_TAG = f"{REGISTRY_HOST}/{GH_USERNAME}/scribd-downloader:latest"

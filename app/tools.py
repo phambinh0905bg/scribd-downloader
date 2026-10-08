@@ -1,4 +1,4 @@
-﻿import os
+import os
 import asyncio
 import logging
 import subprocess
@@ -75,10 +75,12 @@ async def extract_audio_from_video(video_path: Path, output_path: Path, bitrate:
     cmd = [
         "ffmpeg",
         "-y",
+        "-threads", "0",
         "-i", str(video_path),
         "-vn",
         "-c:a", "libmp3lame",
         "-b:a", bitrate,
+        "-compression_level", "0",
         str(output_path)
     ]
     try:

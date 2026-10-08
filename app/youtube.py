@@ -18,11 +18,13 @@ from app.config import settings
 logger = logging.getLogger("youtube")
 
 class YouTubeTask:
-    def __init__(self, task_id: str, url: str, format_type: str = "video", quality: str = "best"):
+    def __init__(self, task_id: str, url: str, format_type: str = "video", quality: str = "best", section_start: Optional[str] = None, section_end: Optional[str] = None):
         self.task_id = task_id
         self.raw_url = url.strip()
         self.format_type = format_type.lower()  # "video" or "audio"
         self.quality = quality                  # "best", "2160p", "1440p", "1080p", "720p", "480p", "360p", "320k", "192k", "128k", "m4a"
+        self.section_start = section_start.strip() if section_start else None
+        self.section_end = section_end.strip() if section_end else None
         
         self.title: str = "Đang phân tích video YouTube..."
         self.uploader: str = ""
@@ -138,10 +140,20 @@ class YouTubeDownloaderService:
     def get_task(self, task_id: str) -> Optional[YouTubeTask]:
         return self.tasks.get(task_id)
 
-    def sanitize_filename(self, filename: str) -> str:
-        clean = re.sub(r'[\\/*?:"<>|]', "", filename)
+    def sanitize_filename(self, filename: str, task_id: str = "") -> str:
+        """Sanitize filename: remove illegal chars, collapse whitespace, limit length.
+        Falls back to task_id-based name if result is empty or still too long."""
+        clean = re.sub(r'[\\/*?:"<>|\x00-\x1f]', "", filename)
         clean = re.sub(r'\s+', " ", clean).strip()
-        return clean[:120] if clean else "youtube_media"
+        # Limit to 80 chars and max 200 bytes in UTF-8
+        if len(clean.encode("utf-8")) > 200:
+            while len(clean.encode("utf-8")) > 200 and len(clean) > 1:
+                clean = clean[:-1]
+            clean = clean.rstrip()
+        clean = clean[:80]
+        if not clean and task_id:
+            clean = f"youtube_{task_id}"
+        return clean if clean else "youtube_media"
 
     def format_duration(self, seconds: Any) -> str:
         if not seconds:
@@ -226,10 +238,10 @@ class YouTubeDownloaderService:
             
             # Audio Qualities
             audio_options = [
-                {"id": "320k", "label": "MP3 - 320 kbps (Chất lượng phòng thu)", "note": "Siêu sắc nét"},
+                {"id": "m4a", "label": "⚡ M4A / AAC (Bản gốc - Siêu tốc, không phải chờ chuyển mã)", "note": "Siêu nhanh"},
+                {"id": "320k", "label": "MP3 - 320 kbps (Chất lượng phòng thu)", "note": "Siêu nét"},
                 {"id": "192k", "label": "MP3 - 192 kbps (Tiêu chuẩn cao)", "note": "Khuyến nghị"},
-                {"id": "128k", "label": "MP3 - 128 kbps (Phổ thông / Tiết kiệm dung lượng)", "note": "Nhẹ"},
-                {"id": "m4a", "label": "M4A / AAC (Bản gốc không nén lại)", "note": "Bản gốc"}
+                {"id": "128k", "label": "MP3 - 128 kbps (Phổ thông / Tiết kiệm dung lượng)", "note": "Nhẹ"}
             ]
             
             return {
@@ -328,7 +340,7 @@ class YouTubeDownloaderService:
             if not yt_dlp:
                 raise RuntimeError("yt-dlp không được cài đặt.")
                 
-            outtmpl = str(task.task_dir / "%(title)s.%(ext)s")
+            outtmpl = str(task.task_dir / f"{task.task_id}.%(ext)s")
             custom_logger = YtDlpCustomLogger(task)
             
             ydl_opts: Dict[str, Any] = {
@@ -343,6 +355,28 @@ class YouTubeDownloaderService:
                 "quiet": False,
                 "no_warnings": False,
             }
+
+            # Optional: Trim / Cut range (--download-sections)
+            if task.section_start or task.section_end:
+                s_start = task.section_start or "0"
+                s_end = task.section_end or "inf"
+                task.add_log(f"✂️ Kích hoạt cắt đoạn tải: từ {s_start} đến {s_end}")
+                try:
+                    def parse_time_str(t_str: str) -> float:
+                        parts = [float(p) for p in t_str.split(":")]
+                        if len(parts) == 3:
+                            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+                        elif len(parts) == 2:
+                            return parts[0] * 60 + parts[1]
+                        return float(t_str)
+
+                    start_sec = parse_time_str(s_start) if s_start != "0" else 0
+                    end_sec = parse_time_str(s_end) if s_end != "inf" else None
+                    if yt_dlp and hasattr(yt_dlp, "utils") and hasattr(yt_dlp.utils, "download_range_func"):
+                        ydl_opts["download_ranges"] = yt_dlp.utils.download_range_func(None, [(start_sec, end_sec)])
+                        ydl_opts["force_keyframes_at_cuts"] = True
+                except Exception as range_err:
+                    task.add_log(f"⚠️ Không thể cài đặt khoảng cắt thời gian: {range_err}", level="warning")
 
             
             # Format selection
@@ -360,10 +394,12 @@ class YouTubeDownloaderService:
                 audio_quality = quality_map.get(task.quality, "192")
                 
                 if task.quality == "m4a":
+                    task.add_log("⚡ Chọn định dạng M4A: Trích xuất trực tiếp bản gốc, không cần re-encode CPU!")
                     ydl_opts.update({
                         "format": "bestaudio[ext=m4a]/bestaudio/best",
                     })
                 else:
+                    task.add_log("⏳ Đang chuẩn bị chuyển đổi sang MP3 bằng FFmpeg đa luồng...")
                     ydl_opts.update({
                         "format": "bestaudio/best",
                         "postprocessors": [{
@@ -371,6 +407,12 @@ class YouTubeDownloaderService:
                             "preferredcodec": "mp3",
                             "preferredquality": audio_quality,
                         }],
+                        "postprocessor_args": {
+                            "FFmpegExtractAudio": [
+                                "-threads", "0",
+                                "-compression_level", "0"
+                            ]
+                        }
                     })
             else:
                 # Video format
@@ -416,13 +458,18 @@ class YouTubeDownloaderService:
             # Pick largest file or matching ext
             final_file = max(downloaded_files, key=lambda f: f.stat().st_size)
             
-            safe_name = self.sanitize_filename(task.title)
+            safe_name = self.sanitize_filename(task.title, task_id=task.task_id)
             ext = final_file.suffix
             safe_filename = f"{safe_name}{ext}"
             
             final_dest = task.task_dir / safe_filename
             if final_file != final_dest:
-                final_file.rename(final_dest)
+                try:
+                    final_file.rename(final_dest)
+                except OSError as rename_err:
+                    task.add_log(f"⚠️ Không thể đổi tên file ({rename_err}), giữ nguyên tên gốc theo ID.", level="warning")
+                    final_dest = final_file
+                    safe_filename = final_file.name
                 
             task.file_path = final_dest
             task.clean_filename = safe_filename
@@ -432,6 +479,41 @@ class YouTubeDownloaderService:
             task.add_log(f"🎉 Tải & Xử lý FFmpeg thành công: {task.clean_filename} (Dung lượng: {task.file_size_mb} MB)")
             task.add_log(f"⏰ File sẽ tự động lưu trữ và xóa sau {settings.CLEANUP_MINUTES} phút.")
             task.update_progress("completed", f"Hoàn tất! Tệp {task.clean_filename} ({task.file_size_mb} MB) đã sẵn sàng.", 100)
+
+            # Auto-send to Telegram if enabled
+            try:
+                from app.telegram_bot import get_telegram_config, send_telegram_file
+                cfg = get_telegram_config()
+                if cfg.get("auto_send_enabled") and cfg.get("bot_token") and cfg.get("chat_id"):
+                    task.add_log("📲 Đang tự động gửi tệp về Telegram...")
+                    asyncio.create_task(send_telegram_file(
+                        final_dest,
+                        caption=f"🎬 {task.title}\n⏱️ {task.duration_str}\n💾 {task.file_size_mb} MB"
+                    ))
+            except Exception as tg_err:
+                logger.warning(f"Lỗi gửi Telegram tự động: {tg_err}")
+
+            # Persist completed task to Database
+            try:
+                from app.database import SessionLocal
+                from app.models import DownloadTaskModel
+                db = SessionLocal()
+                try:
+                    t_model = DownloadTaskModel(
+                        id=task.task_id,
+                        task_type="youtube",
+                        title=task.title,
+                        url=task.raw_url,
+                        status="completed",
+                        filename=task.clean_filename,
+                        file_size_mb=task.file_size_mb
+                    )
+                    db.merge(t_model)
+                    db.commit()
+                finally:
+                    db.close()
+            except Exception:
+                pass
             
         except Exception as e:
             task.error_message = f"Lỗi tải YouTube: {str(e)}"

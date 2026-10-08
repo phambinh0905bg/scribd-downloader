@@ -1,4 +1,4 @@
-﻿from datetime import datetime, date
+from datetime import datetime, date
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Date, ForeignKey, Float, Text
 )
@@ -77,3 +77,16 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="audit_logs")
+
+class DownloadTaskModel(Base):
+    """Bảng lưu trữ thông tin các tác vụ tải về để bảo toàn trạng thái khi container restart"""
+    __tablename__ = "download_tasks"
+    id = Column(String(50), primary_key=True, index=True)
+    task_type = Column(String(20), nullable=False) # scribd, youtube, facebook, direct
+    title = Column(String(255), default="")
+    url = Column(Text, default="")
+    status = Column(String(20), default="completed") # completed, failed
+    filename = Column(String(255), default="")
+    file_size_mb = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    username = Column(String(50), default="anonymous")

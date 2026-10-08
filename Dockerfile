@@ -15,10 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Cài đặt toàn bộ wheels offline (tốc độ < 1 giây, 0 byte tải từ internet)
-COPY wheels /wheels
+# Cài đặt dependencies
 COPY requirements.txt .
-RUN pip install --find-links=/wheels -r requirements.txt && rm -rf /wheels
+RUN pip install --no-cache-dir -r requirements.txt
 # Sao chép mã nguồn ứng dụng
 COPY . /app/
 RUN mkdir -p /app/downloads

@@ -125,6 +125,8 @@ class YouTubeDownloadRequest(BaseModel):
     url: str
     format_type: Optional[str] = "video"  # "video" or "audio"
     quality: Optional[str] = "best"
+    section_start: Optional[str] = None   # e.g. "01:15" or "75"
+    section_end: Optional[str] = None     # e.g. "03:40" or "220"
 
 
 class FacebookInfoRequest(BaseModel):
@@ -383,7 +385,9 @@ async def start_youtube_download(req: YouTubeDownloadRequest, request: Request):
         task_id=task_id,
         url=url,
         format_type=req.format_type or "video",
-        quality=req.quality or "best"
+        quality=req.quality or "best",
+        section_start=req.section_start,
+        section_end=req.section_end
     )
     
     await youtube_service.start_download_task(task)
@@ -441,7 +445,7 @@ async def get_direct_file_info(req: DirectInfoRequest):
     if not url:
         raise HTTPException(status_code=400, detail="Vui lòng nhập URL tệp tin.")
     try:
-        info = await asyncio.to_thread(direct_downloader_service.probe_url_metadata, url)
+        info = await asyncio.to_thread(direct_downloader_service.extract_info, url)
         return {"status": "success", "data": info}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Không thể lấy thông tin tệp: {str(e)}")
@@ -786,8 +790,9 @@ async def stream_task_progress(task_id: str):
             last_status = None
             last_pct = -1
             last_log_count = 0
+            ping_counter = 0
             
-            for _ in range(1200):  # max 20 minutes
+            for _ in range(3600):  # max 60 minutes for huge files
                 if not target_task:
                     break
                 data = target_task.to_dict()
@@ -800,12 +805,19 @@ async def stream_task_progress(task_id: str):
                     last_status = curr_status
                     last_pct = curr_pct
                     last_log_count = curr_log_count
+                    ping_counter = 0
+                else:
+                    ping_counter += 1
+                    # Send keepalive ping every 5 seconds (5 * 1s) to keep SSE alive during heavy ffmpeg encode
+                    if ping_counter >= 5:
+                        yield ": ping\n\n"
+                        ping_counter = 0
                     
                 if curr_status in ["completed", "failed"]:
                     await asyncio.sleep(0.5)
                     break
                     
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(1.0)
 
     return StreamingResponse(
         event_generator(),
@@ -874,6 +886,7 @@ async def download_output_file(task_id: str):
                 media_type=content_type
             )
             
+    raise HTTPException(status_code=404, detail="Không tìm thấy tệp tin hoặc tệp đã hết hạn lưu trữ.")
 @app.get("/api/files")
 async def list_downloaded_files():
     """List all available completed files in downloads storage with metadata, preview links and pin status."""
@@ -928,8 +941,27 @@ async def list_downloaded_files():
                 file_type = "file"
                 content_type = "application/octet-stream"
 
+            # Enrich with DB info if available
+            db_title = ""
+            db_task_type = file_type
+            try:
+                from app.database import SessionLocal
+                from app.models import DownloadTaskModel
+                db = SessionLocal()
+                try:
+                    record = db.query(DownloadTaskModel).filter_by(id=task_id).first()
+                    if record:
+                        db_title = record.title
+                        db_task_type = record.task_type
+                finally:
+                    db.close()
+            except Exception:
+                pass
+
             results.append({
                 "task_id": task_id,
+                "title": db_title or main_file.name,
+                "task_type": db_task_type,
                 "filename": main_file.name,
                 "file_type": file_type,
                 "content_type": content_type,
