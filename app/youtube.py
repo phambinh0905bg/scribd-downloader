@@ -397,6 +397,7 @@ class YouTubeDownloaderService:
                     task.add_log("⚡ Chọn định dạng M4A: Trích xuất trực tiếp bản gốc, không cần re-encode CPU!")
                     ydl_opts.update({
                         "format": "bestaudio[ext=m4a]/bestaudio/best",
+                        "fixup": "never",
                     })
                 else:
                     task.add_log("⏳ Đang chuẩn bị chuyển đổi sang MP3 bằng FFmpeg đa luồng...")
@@ -440,7 +441,33 @@ class YouTubeDownloaderService:
             task.add_log("Đang phân tích định dạng và tìm kiếm máy chủ luồng stream...")
             task.update_progress("extracting", "Đang trích xuất thông tin luồng video/audio...", 15)
             
-            info = await asyncio.to_thread(run_ytdlp)
+            # Background heartbeat to increment compiling progress if ffmpeg takes minutes
+            stop_heartbeat = asyncio.Event()
+            async def compiling_monitor():
+                step = 0
+                while not stop_heartbeat.is_set():
+                    try:
+                        await asyncio.wait_for(stop_heartbeat.wait(), timeout=2.5)
+                        break
+                    except asyncio.TimeoutError:
+                        step += 1
+                        if task.status == "compiling":
+                            # Dynamic incremental pulse between 90% and 98%
+                            new_pct = min(98, 90 + int(step * 0.5))
+                            # Check disk file size in task_dir if present
+                            try:
+                                total_sz = sum(f.stat().st_size for f in task.task_dir.iterdir() if f.is_file())
+                                sz_mb = round(total_sz / (1024 * 1024), 1)
+                                task.update_progress("compiling", f"FFmpeg đang tối ưu hóa & ghi đĩa ({sz_mb} MB)... Vui lòng đợi.", new_pct)
+                            except Exception:
+                                task.update_progress("compiling", "FFmpeg đang hoàn thiện tệp thành phẩm... Vui lòng đợi.", new_pct)
+
+            monitor_task = asyncio.create_task(compiling_monitor())
+            try:
+                info = await asyncio.to_thread(run_ytdlp)
+            finally:
+                stop_heartbeat.set()
+                await monitor_task
             
             raw_title = info.get("title", f"YouTube_Media_{task.task_id}")
             task.title = raw_title

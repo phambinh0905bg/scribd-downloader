@@ -731,7 +731,7 @@ function startTrackingProgress(taskId) {
   };
 
   activeEventSource.onerror = (err) => {
-    console.warn("SSE error, falling back to polling...", err);
+    // If activeEventSource failed or closed, fall back to polling without crashing UI
     if (activeEventSource) {
       activeEventSource.close();
       activeEventSource = null;
@@ -751,9 +751,12 @@ function startFallbackPolling(taskId) {
         if (data.status === "completed" || data.status === "failed") {
           stopTracking();
         }
+      } else if (res.status === 404) {
+        // Tác vụ không tồn tại hoặc đã bị hủy
+        stopTracking();
       }
     } catch (err) {
-      console.error("Polling error", err);
+      console.warn("Polling retry error", err);
     }
   }, 1000);
 }
@@ -1720,13 +1723,16 @@ if (btnLogout) {
   });
 }
 
-// Global 401 Interceptor: Redirect to /login if unauthorized
+// Global 401 Interceptor: Redirect to /login if unauthorized (except status polling)
 const originalFetch = window.fetch;
 window.fetch = async function(...args) {
   const response = await originalFetch(...args);
   if (response.status === 401) {
-    const nextUrl = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.href = `/login?next=${nextUrl}`;
+    const urlStr = typeof args[0] === "string" ? args[0] : (args[0]?.url || "");
+    if (!urlStr.includes("/api/status/")) {
+      const nextUrl = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/login?next=${nextUrl}`;
+    }
   }
   return response;
 };

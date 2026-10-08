@@ -85,6 +85,8 @@ async def auth_middleware(request: Request, call_next):
     if (
         not settings.AUTH_ENABLED
         or path.startswith("/static")
+        or path.startswith("/api/stream/")
+        or path.startswith("/api/status/")
         or path.startswith("/api/gdrive/download/")
         or path.startswith("/api/gdrive/stream/")
         or path in ("/login", "/logout", "/favicon.ico", "/api/version")
