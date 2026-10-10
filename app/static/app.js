@@ -46,6 +46,15 @@ const unifiedSubmitIcon = document.getElementById("unified-submit-icon");
 const detectedServiceBadge = document.getElementById("detected-service-badge");
 const unifiedUrlIcon = document.getElementById("unified-url-icon");
 
+// Mode Switcher Elements
+const btnModeSingle = document.getElementById("btn-mode-single");
+const btnModeBatch = document.getElementById("btn-mode-batch");
+const unifiedSingleContainer = document.getElementById("unified-single-container");
+const unifiedBatchContainer = document.getElementById("unified-batch-container");
+const unifiedBatchInput = document.getElementById("unified-batch-input");
+const batchCountBadge = document.getElementById("batch-count-badge");
+let isBatchMode = false;
+
 // Dynamic Panels
 const panelOptionsScribd = document.getElementById("panel-options-scribd");
 const panelOptionsMedia = document.getElementById("panel-options-media");
@@ -233,6 +242,54 @@ if (tabAdmin) tabAdmin.addEventListener("click", () => switchTab("admin"));
 
 if (tabFilesM) tabFilesM.addEventListener("click", () => switchTab("files"));
 if (tabToolsM) tabToolsM.addEventListener("click", () => switchTab("tools"));
+
+// Mode Switcher: Single vs Batch
+function setBatchMode(enabled) {
+  isBatchMode = enabled;
+  if (enabled) {
+    if (btnModeBatch) {
+      btnModeBatch.classList.add("bg-indigo-600", "text-white", "shadow");
+      btnModeBatch.classList.remove("text-slate-400");
+    }
+    if (btnModeSingle) {
+      btnModeSingle.classList.remove("bg-indigo-600", "text-white", "shadow");
+      btnModeSingle.classList.add("text-slate-400");
+    }
+    if (unifiedSingleContainer) unifiedSingleContainer.classList.add("hidden");
+    if (unifiedBatchContainer) unifiedBatchContainer.classList.remove("hidden");
+    if (btnUnifiedText) btnUnifiedText.textContent = "Bắt Đầu Tải Hàng Loạt";
+    // Show media panel as common format chooser for batch
+    if (panelOptionsMedia) panelOptionsMedia.classList.remove("hidden");
+    if (panelOptionsScribd) panelOptionsScribd.classList.add("hidden");
+    if (panelOptionsDirect) panelOptionsDirect.classList.add("hidden");
+  } else {
+    if (btnModeSingle) {
+      btnModeSingle.classList.add("bg-indigo-600", "text-white", "shadow");
+      btnModeSingle.classList.remove("text-slate-400");
+    }
+    if (btnModeBatch) {
+      btnModeBatch.classList.remove("bg-indigo-600", "text-white", "shadow");
+      btnModeBatch.classList.add("text-slate-400");
+    }
+    if (unifiedSingleContainer) unifiedSingleContainer.classList.remove("hidden");
+    if (unifiedBatchContainer) unifiedBatchContainer.classList.add("hidden");
+    if (btnUnifiedText) btnUnifiedText.textContent = "Bắt Đầu Tải Về";
+    if (unifiedUrlInput) updateUnifiedUIForUrl(unifiedUrlInput.value.trim());
+  }
+}
+
+if (btnModeSingle) btnModeSingle.addEventListener("click", () => setBatchMode(false));
+if (btnModeBatch) btnModeBatch.addEventListener("click", () => setBatchMode(true));
+
+if (unifiedBatchInput) {
+  unifiedBatchInput.addEventListener("input", () => {
+    const lines = unifiedBatchInput.value.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    if (batchCountBadge) {
+      batchCountBadge.textContent = `${lines.length} đường dẫn`;
+    }
+  });
+}
+
 
 // ==================== UNIFIED URL ROUTING & PREVIEW LOGIC ====================
 
@@ -467,6 +524,48 @@ if (scribdEnableOcr && scribdOcrOptions) {
 if (unifiedForm) {
   unifiedForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isBatchMode) {
+      const rawText = unifiedBatchInput ? unifiedBatchInput.value.trim() : "";
+      const urls = rawText.split("\n").map(u => u.trim()).filter(u => u.length > 0);
+      if (urls.length === 0) {
+        alert("Vui lòng nhập ít nhất một URL vào danh sách hàng loạt!");
+        return;
+      }
+
+      setSubmitting(btnUnifiedSubmit, true, `Đang xử lý ${urls.length} liên kết...`);
+      try {
+        const formatType = document.querySelector('input[name="media-format-type"]:checked')?.value || "video";
+        const quality = formatType === "video" ? (mediaVideoQuality?.value || "best") : (mediaAudioQuality?.value || "m4a");
+
+        const items = urls.map(u => ({
+          url: u,
+          format_type: formatType,
+          quality: quality,
+          pages: "all"
+        }));
+
+        const res = await fetch("/api/batch/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items })
+        });
+        const batchData = await res.json();
+        if (res.ok && batchData.status === "success") {
+          alert(`Đã khởi chạy thành công ${batchData.started_count}/${batchData.total_requested} tác vụ tải! Chuyển tới mục Tệp của tôi để theo dõi.`);
+          if (unifiedBatchInput) unifiedBatchInput.value = "";
+          switchTab("files");
+          loadFilesList();
+        } else {
+          alert("Lỗi tải hàng loạt: " + (batchData.detail || "Không thể xử lý danh sách"));
+        }
+      } catch (err) {
+        alert("Lỗi kết nối khi gửi yêu cầu tải hàng loạt.");
+      } finally {
+        setSubmitting(btnUnifiedSubmit, false, "Bắt Đầu Tải Hàng Loạt");
+      }
+      return;
+    }
+
     const url = unifiedUrlInput ? unifiedUrlInput.value.trim() : "";
     if (!url) {
       alert("Vui lòng nhập đường dẫn URL cần tải!");
@@ -964,11 +1063,62 @@ const btnOpenBookmarklet = document.getElementById("btn-open-bookmarklet");
 const bookmarkletCloseBtn = document.getElementById("bookmarklet-close-btn");
 const bookmarkletDraggableLink = document.getElementById("bookmarklet-draggable-link");
 
+async function loadStorageStats() {
+  try {
+    const res = await fetch("/api/storage");
+    const data = await res.json();
+    const usedMbEl = document.getElementById("storage-used-mb");
+    const freeGbEl = document.getElementById("storage-free-gb");
+    const totalGbEl = document.getElementById("storage-total-gb");
+    const barEl = document.getElementById("storage-bar");
+    const pctEl = document.getElementById("storage-pct");
+
+    if (usedMbEl) usedMbEl.textContent = `${data.total_size_mb || 0} MB`;
+    if (freeGbEl) freeGbEl.textContent = `${((data.disk_free_mb || 0) / 1024).toFixed(1)} GB`;
+    if (totalGbEl) totalGbEl.textContent = `${((data.disk_total_mb || 0) / 1024).toFixed(1)} GB`;
+
+    const pct = Math.min(100, Math.max(0, data.disk_percent || 0));
+    if (barEl) {
+      barEl.style.width = `${pct}%`;
+      if (pct > 90) barEl.className = "bg-rose-500 h-full transition-all duration-500";
+      else if (pct > 75) barEl.className = "bg-amber-500 h-full transition-all duration-500";
+      else barEl.className = "bg-gradient-to-r from-purple-500 to-indigo-500 h-full transition-all duration-500";
+    }
+    if (pctEl) pctEl.textContent = `${pct}%`;
+  } catch (err) {
+    console.error("Lỗi lấy thông tin dung lượng:", err);
+  }
+}
+
+const btnTriggerCleanup = document.getElementById("btn-trigger-cleanup");
+if (btnTriggerCleanup) {
+  btnTriggerCleanup.addEventListener("click", async () => {
+    if (!confirm("Bạn có chắc chắn muốn dọn dẹp các tệp cũ đã hết hạn lưu trữ (trừ các tệp đã ghim)?")) return;
+    try {
+      btnTriggerCleanup.disabled = true;
+      const res = await fetch("/api/cleanup", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        alert(`Dọn dẹp hoàn tất: Giải phóng ${data.result.freed_mb} MB (${data.result.deleted_folders} thư mục, ${data.result.deleted_files} tệp tin).`);
+        loadFilesList();
+      } else {
+        alert("Lỗi khi dọn dẹp: " + (data.detail || "Không thể dọn dẹp"));
+      }
+    } catch (err) {
+      alert("Lỗi kết nối khi dọn dẹp tệp.");
+    } finally {
+      btnTriggerCleanup.disabled = false;
+    }
+  });
+}
+
 async function loadFilesList() {
   if (btnRefreshFiles) {
     const icon = btnRefreshFiles.querySelector("svg");
     if (icon) icon.classList.add("animate-spin");
   }
+
+  loadStorageStats();
 
   try {
     const res = await fetch("/api/files");
@@ -1505,6 +1655,13 @@ const btnRunAudio = document.getElementById("btn-run-audio");
 const toolAudioResult = document.getElementById("tool-audio-result");
 const toolAudioDownloadBtn = document.getElementById("tool-audio-download-btn");
 
+const toolSplitSelect = document.getElementById("tool-split-select");
+const toolSplitPages = document.getElementById("tool-split-pages");
+const btnRunSplit = document.getElementById("btn-run-split");
+const toolSplitResult = document.getElementById("tool-split-result");
+const toolSplitCount = document.getElementById("tool-split-count");
+const toolSplitDownloadBtn = document.getElementById("tool-split-download-btn");
+
 function populateToolsLists() {
   const pdfs = allFiles.filter(f => f.file_type === "pdf");
   const videos = allFiles.filter(f => f.file_type === "video");
@@ -1515,6 +1672,16 @@ function populateToolsLists() {
       toolCompressSelect.innerHTML = `<option value="">-- Chưa có tệp PDF nào trong thư viện --</option>`;
     } else {
       toolCompressSelect.innerHTML = `<option value="">-- Chọn tệp PDF cần nén (${pdfs.length} tệp) --</option>` +
+        pdfs.map(p => `<option value="${p.task_id}">${escapeHtml(p.filename)} (${p.size_mb} MB)</option>`).join("");
+    }
+  }
+
+  // Populate Split Select
+  if (toolSplitSelect) {
+    if (pdfs.length === 0) {
+      toolSplitSelect.innerHTML = `<option value="">-- Chưa có tệp PDF nào trong thư viện --</option>`;
+    } else {
+      toolSplitSelect.innerHTML = `<option value="">-- Chọn tệp PDF cần tách (${pdfs.length} tệp) --</option>` +
         pdfs.map(p => `<option value="${p.task_id}">${escapeHtml(p.filename)} (${p.size_mb} MB)</option>`).join("");
     }
   }
@@ -1544,6 +1711,47 @@ function populateToolsLists() {
     }
   }
 }
+
+// Split PDF Action
+if (btnRunSplit) {
+  btnRunSplit.addEventListener("click", async () => {
+    const tid = toolSplitSelect?.value;
+    if (!tid) {
+      alert("Vui lòng chọn 1 tệp PDF cần tách trang!");
+      return;
+    }
+    const pageRanges = toolSplitPages?.value.trim() || "all";
+
+    btnRunSplit.innerText = "Đang tách trang qua Pikepdf...";
+    btnRunSplit.disabled = true;
+
+    try {
+      const res = await fetch("/api/tools/split-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task_id: tid, page_ranges: pageRanges })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        if (toolSplitCount) toolSplitCount.innerText = data.extracted_pages;
+        if (toolSplitDownloadBtn) {
+          toolSplitDownloadBtn.href = data.download_url;
+          toolSplitDownloadBtn.setAttribute("download", data.filename);
+        }
+        if (toolSplitResult) toolSplitResult.classList.remove("hidden");
+        loadFilesList();
+      } else {
+        alert("Lỗi tách PDF: " + (data.detail || "Không thể tách tệp"));
+      }
+    } catch (err) {
+      alert("Lỗi kết nối máy chủ khi tách trang PDF.");
+    } finally {
+      btnRunSplit.innerText = "Tách Trang PDF";
+      btnRunSplit.disabled = false;
+    }
+  });
+}
+
 
 // Compress PDF Action
 if (btnRunCompress) {

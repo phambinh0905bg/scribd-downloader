@@ -268,10 +268,29 @@ def get_storage_stats() -> Dict:
                     "remaining_minutes": remaining_minutes
                 })
 
+    # Get overall disk usage on downloads volume
+    disk_total_mb = 0.0
+    disk_free_mb = 0.0
+    disk_used_mb = 0.0
+    disk_percent = 0.0
+    try:
+        du = shutil.disk_usage(downloads_dir)
+        disk_total_mb = round(du.total / (1024 * 1024), 2)
+        disk_free_mb = round(du.free / (1024 * 1024), 2)
+        disk_used_mb = round(du.used / (1024 * 1024), 2)
+        disk_percent = round((du.used / du.total) * 100, 1) if du.total > 0 else 0.0
+    except Exception:
+        pass
+
     return {
         "total_items": total_files,
         "total_size_bytes": total_size,
         "total_size_mb": round(total_size / (1024 * 1024), 2),
         "cleanup_ttl_minutes": settings.CLEANUP_MINUTES,
+        "disk_total_mb": disk_total_mb,
+        "disk_free_mb": disk_free_mb,
+        "disk_used_mb": disk_used_mb,
+        "disk_percent": disk_percent,
         "items": items
     }
+

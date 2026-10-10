@@ -400,14 +400,22 @@ class YouTubeDownloaderService:
                         "fixup": "never",
                     })
                 else:
-                    task.add_log("⏳ Đang chuẩn bị chuyển đổi sang MP3 bằng FFmpeg đa luồng...")
-                    ydl_opts.update({
-                        "format": "bestaudio/best",
-                        "postprocessors": [{
+                    task.add_log("⏳ Đang chuẩn bị chuyển đổi sang MP3 bằng FFmpeg & nhúng siêu dữ liệu/ảnh bìa...")
+                    postprocessors_list = [
+                        {
                             "key": "FFmpegExtractAudio",
                             "preferredcodec": "mp3",
                             "preferredquality": audio_quality,
-                        }],
+                        },
+                        {
+                            "key": "FFmpegMetadata",
+                            "add_metadata": True,
+                        }
+                    ]
+                    ydl_opts.update({
+                        "format": "bestaudio/best",
+                        "writethumbnail": True,
+                        "postprocessors": postprocessors_list,
                         "postprocessor_args": {
                             "FFmpegExtractAudio": [
                                 "-threads", "0",

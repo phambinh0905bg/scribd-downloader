@@ -199,6 +199,23 @@ class ExtractAudioRequest(BaseModel):
     bitrate: Optional[str] = "320k"
 
 
+class SplitPdfRequest(BaseModel):
+    task_id: str
+    page_ranges: str  # e.g. "1-5, 8, 11-15" or "all"
+
+
+class BatchDownloadItem(BaseModel):
+    url: str
+    format_type: Optional[str] = "video"
+    quality: Optional[str] = "best"
+    pages: Optional[str] = "all"
+    custom_filename: Optional[str] = None
+
+
+class BatchDownloadRequest(BaseModel):
+    items: List[BatchDownloadItem]
+
+
 class BarcodeGenerateRequest(BaseModel):
     content: str
     barcode_type: str = "qrcode"
@@ -473,6 +490,89 @@ async def start_direct_file_download(req: DirectDownloadRequest, request: Reques
         "status": "success",
         "task_id": task_id,
         "message": "Đã khởi tạo tác vụ tải tệp tin từ xa."
+    }
+
+
+# --- BATCH DOWNLOAD ENDPOINT ---
+
+@app.post("/api/batch/download")
+async def start_batch_download(req: BatchDownloadRequest, request: Request):
+    """Xử lý hàng loạt URL: phân loại dịch vụ và kích hoạt tác vụ tải tương ứng."""
+    if not req.items:
+        raise HTTPException(status_code=400, detail="Danh sách tải hàng loạt rỗng.")
+
+    started_tasks = []
+    errors = []
+
+    for idx, item in enumerate(req.items):
+        raw_url = item.url.strip()
+        if not raw_url:
+            continue
+        lower = raw_url.lower()
+
+        try:
+            # 1. Scribd
+            if "scribd.com" in lower:
+                enforce_rbac_and_abac(request, "download:scribd", service="scribd", resource_url=raw_url)
+                doc_id = downloader_service.extract_doc_id(raw_url)
+                if doc_id:
+                    task_id = str(uuid.uuid4())[:8]
+                    task = downloader_service.create_task(
+                        task_id, raw_url, item.pages or "all", enable_ocr=False
+                    )
+                    asyncio.create_task(downloader_service.run_download_task(task))
+                    started_tasks.append({"task_id": task_id, "url": raw_url, "service": "scribd"})
+                else:
+                    errors.append({"url": raw_url, "error": "Không trích xuất được ID Scribd"})
+
+            # 2. YouTube
+            elif "youtube.com" in lower or "youtu.be" in lower:
+                enforce_rbac_and_abac(request, "download:youtube", service="youtube", resource_url=raw_url)
+                task_id = str(uuid.uuid4())[:8]
+                task = YouTubeTask(
+                    task_id=task_id,
+                    url=raw_url,
+                    format_type=item.format_type or "video",
+                    quality=item.quality or "best"
+                )
+                await youtube_service.start_download_task(task)
+                started_tasks.append({"task_id": task_id, "url": raw_url, "service": "youtube"})
+
+            # 3. Social (Facebook, TikTok, Instagram, Twitter/X)
+            elif any(d in lower for d in ["facebook.com", "fb.watch", "tiktok.com", "instagram.com", "twitter.com", "x.com"]):
+                enforce_rbac_and_abac(request, "download:social", service="social", resource_url=raw_url)
+                task_id = str(uuid.uuid4())[:8]
+                task = FacebookTask(
+                    task_id=task_id,
+                    url=raw_url,
+                    format_type=item.format_type or "video",
+                    quality=item.quality or "best"
+                )
+                await facebook_service.start_download_task(task)
+                started_tasks.append({"task_id": task_id, "url": raw_url, "service": "social"})
+
+            # 4. Direct Remote URL
+            elif raw_url.startswith("http://") or raw_url.startswith("https://"):
+                enforce_rbac_and_abac(request, "download:direct", service="direct", resource_url=raw_url)
+                task_id = str(uuid.uuid4())[:8]
+                task = DirectDownloadTask(
+                    task_id=task_id,
+                    url=raw_url,
+                    custom_filename=item.custom_filename
+                )
+                await direct_downloader_service.start_download_task(task)
+                started_tasks.append({"task_id": task_id, "url": raw_url, "service": "direct"})
+            else:
+                errors.append({"url": raw_url, "error": "Định dạng URL không được hỗ trợ"})
+        except Exception as e:
+            errors.append({"url": raw_url, "error": str(e)})
+
+    return {
+        "status": "success",
+        "total_requested": len(req.items),
+        "started_count": len(started_tasks),
+        "tasks": started_tasks,
+        "errors": errors
     }
 
 
@@ -1227,6 +1327,36 @@ async def api_extract_audio(req: ExtractAudioRequest):
             "size_mb": res["size_mb"]
         }
     raise HTTPException(status_code=400, detail=res.get("error", "Lỗi tách âm thanh từ video"))
+
+
+@app.post("/api/tools/split-pdf")
+async def api_split_pdf(req: SplitPdfRequest):
+    from app.tools import split_pdf
+    task_dir = settings.DOWNLOADS_DIR / req.task_id
+    if not task_dir.exists():
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp")
+
+    pdf_files = [f for f in task_dir.glob("*.pdf") if not f.name.startswith("split_")]
+    if not pdf_files:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tệp PDF để tách trang")
+
+    src_pdf = pdf_files[0]
+    new_task_id = str(uuid.uuid4())[:8]
+    new_dir = settings.DOWNLOADS_DIR / new_task_id
+
+    res = split_pdf(src_pdf, new_dir, req.page_ranges)
+    if res.get("success"):
+        return {
+            "status": "success",
+            "task_id": new_task_id,
+            "filename": res["output_filename"],
+            "download_url": f"/api/file/{new_task_id}",
+            "total_source_pages": res["total_source_pages"],
+            "extracted_pages": res["extracted_pages"],
+            "size_mb": res["size_mb"]
+        }
+    raise HTTPException(status_code=400, detail=res.get("error", "Lỗi tách trang PDF"))
+
 
 
 @app.post("/api/tools/barcode/generate")

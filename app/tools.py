@@ -67,6 +67,59 @@ def merge_pdfs(pdf_paths: List[Path], output_path: Path) -> Dict[str, Any]:
         logger.error(f"Lỗi ghép PDF: {e}")
         return {"success": False, "error": str(e)}
 
+def split_pdf(input_path: Path, output_dir: Path, page_range_str: str) -> Dict[str, Any]:
+    """Split PDF into selected pages or page ranges using pikepdf."""
+    if not input_path.exists():
+        return {"success": False, "error": "Tệp PDF gốc không tồn tại"}
+
+    try:
+        with pikepdf.open(input_path) as src:
+            total_pages = len(src.pages)
+            selected_indices = set()
+            
+            # Parse page range string e.g. "1-3, 5, 8-10" or "all"
+            clean_str = page_range_str.strip().lower()
+            if not clean_str or clean_str == "all":
+                selected_indices = set(range(total_pages))
+            else:
+                parts = [p.strip() for p in clean_str.split(",") if p.strip()]
+                for p in parts:
+                    if "-" in p:
+                        subparts = p.split("-")
+                        if len(subparts) == 2 and subparts[0].isdigit() and subparts[1].isdigit():
+                            start_p = max(1, int(subparts[0]))
+                            end_p = min(total_pages, int(subparts[1]))
+                            for idx in range(start_p - 1, end_p):
+                                selected_indices.add(idx)
+                    elif p.isdigit():
+                        p_num = int(p)
+                        if 1 <= p_num <= total_pages:
+                            selected_indices.add(p_num - 1)
+
+            if not selected_indices:
+                return {"success": False, "error": f"Không có trang hợp lệ được chọn (tổng số trang: {total_pages})"}
+
+            sorted_indices = sorted(list(selected_indices))
+            dst = pikepdf.Pdf.new()
+            for idx in sorted_indices:
+                dst.pages.append(src.pages[idx])
+
+            output_dir.mkdir(parents=True, exist_ok=True)
+            out_filename = f"split_{input_path.stem}.pdf"
+            out_path = output_dir / out_filename
+            dst.save(out_path, compress_streams=True)
+
+            return {
+                "success": True,
+                "total_source_pages": total_pages,
+                "extracted_pages": len(sorted_indices),
+                "output_filename": out_filename,
+                "size_mb": round(out_path.stat().st_size / (1024 * 1024), 2)
+            }
+    except Exception as e:
+        logger.error(f"Lỗi tách trang PDF {input_path.name}: {e}")
+        return {"success": False, "error": str(e)}
+
 async def extract_audio_from_video(video_path: Path, output_path: Path, bitrate: str = "320k") -> Dict[str, Any]:
     """Extract audio from video file using ffmpeg."""
     if not video_path.exists():
