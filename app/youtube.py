@@ -179,6 +179,9 @@ class YouTubeDownloaderService:
             "no_warnings": True,
             "skip_download": True,
             "extract_flat": False,
+            "js_runtimes": {
+                "node": {"path": "/usr/local/lib/python3.12/dist-packages/playwright/driver/node"}
+            } if Path("/usr/local/lib/python3.12/dist-packages/playwright/driver/node").exists() else {}
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -343,6 +346,9 @@ class YouTubeDownloaderService:
             outtmpl = str(task.task_dir / f"{task.task_id}.%(ext)s")
             custom_logger = YtDlpCustomLogger(task)
             
+            node_path = Path("/usr/local/lib/python3.12/dist-packages/playwright/driver/node")
+            js_runtimes_config = {"node": {"path": str(node_path)}} if node_path.exists() else {}
+
             ydl_opts: Dict[str, Any] = {
                 "outtmpl": outtmpl,
                 "paths": {
@@ -354,6 +360,11 @@ class YouTubeDownloaderService:
                 "logger": custom_logger,
                 "quiet": False,
                 "no_warnings": False,
+                "js_runtimes": js_runtimes_config,
+                "http_headers": {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    "Accept-Language": "en-US,en;q=0.9,vi;q=0.8",
+                },
             }
 
             # Optional: Trim / Cut range (--download-sections)

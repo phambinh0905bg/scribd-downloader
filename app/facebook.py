@@ -172,11 +172,13 @@ class FacebookDownloaderService:
         if not yt_dlp:
             raise RuntimeError("Thư viện yt-dlp chưa được cài đặt.")
             
+        node_path = Path("/usr/local/lib/python3.12/dist-packages/playwright/driver/node")
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "skip_download": True,
             "extract_flat": False,
+            "js_runtimes": {"node": {"path": str(node_path)}} if node_path.exists() else {}
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -317,6 +319,9 @@ class FacebookDownloaderService:
             outtmpl = str(task.task_dir / f"{task.task_id}.%(ext)s")
             custom_logger = FbCustomLogger(task)
             
+            node_path = Path("/usr/local/lib/python3.12/dist-packages/playwright/driver/node")
+            js_runtimes_config = {"node": {"path": str(node_path)}} if node_path.exists() else {}
+
             ydl_opts: Dict[str, Any] = {
                 "outtmpl": outtmpl,
                 "paths": {
@@ -328,6 +333,11 @@ class FacebookDownloaderService:
                 "logger": custom_logger,
                 "quiet": False,
                 "no_warnings": False,
+                "js_runtimes": js_runtimes_config,
+                "http_headers": {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    "Accept-Language": "en-US,en;q=0.9,vi;q=0.8",
+                },
             }
 
             

@@ -20,7 +20,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 # Sao chép mã nguồn ứng dụng
 COPY . /app/
-RUN mkdir -p /app/downloads
+RUN mkdir -p /app/downloads && \
+    ( [ -f /usr/local/lib/python3.12/dist-packages/playwright/driver/node ] && ln -sf /usr/local/lib/python3.12/dist-packages/playwright/driver/node /usr/local/bin/node || true )
+
 
 EXPOSE 8000
 VOLUME ["/app/downloads"]
