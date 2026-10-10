@@ -39,6 +39,7 @@ const errorSection = document.getElementById("error-section");
 // Unified Downloader Elements
 const unifiedForm = document.getElementById("unified-download-form");
 const unifiedUrlInput = document.getElementById("unified-url-input");
+const btnUnifiedClear = document.getElementById("btn-unified-clear");
 const btnUnifiedPaste = document.getElementById("btn-unified-paste");
 const btnUnifiedSubmit = document.getElementById("btn-unified-submit");
 const btnUnifiedText = document.getElementById("btn-unified-text");
@@ -306,7 +307,72 @@ function detectUrlType(url) {
 
 let unifiedInspectTimeout = null;
 
+function clearUnifiedInputsAndPreviews(clearInput = true) {
+  clearTimeout(unifiedInspectTimeout);
+
+  // 1. Clear input texts
+  if (clearInput) {
+    if (unifiedUrlInput) unifiedUrlInput.value = "";
+    if (unifiedBatchInput) unifiedBatchInput.value = "";
+    if (btnUnifiedClear) btnUnifiedClear.classList.add("hidden");
+  }
+  if (scribdPagesInput) scribdPagesInput.value = "";
+  if (scribdEnableOcr) scribdEnableOcr.checked = false;
+  if (scribdOcrOptions) scribdOcrOptions.classList.add("hidden");
+  if (mediaTrimStart) mediaTrimStart.value = "";
+  if (mediaTrimEnd) mediaTrimEnd.value = "";
+  if (directCustomName) directCustomName.value = "";
+
+  // 2. Hide dynamic option panels
+  if (panelOptionsScribd) panelOptionsScribd.classList.add("hidden");
+  if (panelOptionsMedia) panelOptionsMedia.classList.add("hidden");
+  if (panelOptionsDirect) panelOptionsDirect.classList.add("hidden");
+
+  // 3. Reset and hide preview cards
+  if (mediaPreviewCard) mediaPreviewCard.classList.add("hidden");
+  if (mediaPreviewThumb) mediaPreviewThumb.src = "";
+  if (mediaPreviewTitle) mediaPreviewTitle.innerText = "...";
+  if (mediaPreviewChannel) mediaPreviewChannel.innerText = "...";
+  if (mediaPreviewDuration) mediaPreviewDuration.innerText = "00:00";
+
+  if (directPreviewCard) directPreviewCard.classList.add("hidden");
+  if (directPreviewFilename) directPreviewFilename.innerText = "tệp_tin.bin";
+  if (directPreviewSize) directPreviewSize.innerText = "--";
+  if (directPreviewType) directPreviewType.innerText = "application/octet-stream";
+
+  // 4. Reset badge and icon
+  if (detectedServiceBadge) {
+    detectedServiceBadge.innerText = "";
+    detectedServiceBadge.classList.add("hidden");
+  }
+  if (unifiedUrlIcon) {
+    unifiedUrlIcon.className = "w-5 h-5 text-indigo-400 transition-colors";
+  }
+  if (btnUnifiedText) {
+    btnUnifiedText.innerText = "Bắt Đầu Tải Về";
+  }
+  if (batchCountBadge) {
+    batchCountBadge.innerText = "0 đường dẫn";
+  }
+
+  // Legacy elements cleanup
+  if (typeof scribdUrlInput !== "undefined" && scribdUrlInput) scribdUrlInput.value = "";
+  if (typeof ytUrlInput !== "undefined" && ytUrlInput) ytUrlInput.value = "";
+  if (typeof fbUrlInput !== "undefined" && fbUrlInput) fbUrlInput.value = "";
+  if (typeof directUrlInput !== "undefined" && directUrlInput) directUrlInput.value = "";
+
+  currentMode = "direct";
+}
+
 function updateUnifiedUIForUrl(url) {
+  if (btnUnifiedClear) {
+    if (url && url.length > 0) {
+      btnUnifiedClear.classList.remove("hidden");
+    } else {
+      btnUnifiedClear.classList.add("hidden");
+    }
+  }
+
   const type = detectUrlType(url);
   currentMode = type || "direct";
 
@@ -317,6 +383,8 @@ function updateUnifiedUIForUrl(url) {
   if (detectedServiceBadge) detectedServiceBadge.classList.add("hidden");
 
   if (!type) {
+    if (mediaPreviewCard) mediaPreviewCard.classList.add("hidden");
+    if (directPreviewCard) directPreviewCard.classList.add("hidden");
     if (unifiedUrlIcon) unifiedUrlIcon.className = "w-5 h-5 text-indigo-400 transition-colors";
     if (btnUnifiedText) btnUnifiedText.innerText = "Bắt Đầu Tải Về";
     return;
@@ -377,7 +445,18 @@ function updateUnifiedUIForUrl(url) {
 
 if (unifiedUrlInput) {
   unifiedUrlInput.addEventListener("input", (e) => {
-    updateUnifiedUIForUrl(e.target.value.trim());
+    const val = e.target.value.trim();
+    if (!val) {
+      clearUnifiedInputsAndPreviews(false);
+    }
+    updateUnifiedUIForUrl(val);
+  });
+}
+
+if (btnUnifiedClear) {
+  btnUnifiedClear.addEventListener("click", () => {
+    clearUnifiedInputsAndPreviews(true);
+    if (unifiedUrlInput) unifiedUrlInput.focus();
   });
 }
 
@@ -695,6 +774,9 @@ function showResultView(taskData) {
 
   startCountdown(taskData.expires_in_seconds || 18000); // 5 hours default
   resultSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  // Tự động làm sạch input và các thông tin preview để sẵn sàng tải URL tiếp theo
+  clearUnifiedInputsAndPreviews(true);
 }
 
 function showErrorView(message) {
@@ -733,9 +815,11 @@ if (btnCancelDownload) {
       currentTaskId = null;
     }
     resetUI();
+    clearUnifiedInputsAndPreviews(true);
     progressSection.classList.add("hidden");
     resultSection.classList.add("hidden");
     errorSection.classList.add("hidden");
+    if (unifiedUrlInput) unifiedUrlInput.focus();
   });
 }
 
@@ -752,35 +836,26 @@ if (btnDeleteServer) {
       currentTaskId = null;
     }
     resetUI();
+    clearUnifiedInputsAndPreviews(true);
     progressSection.classList.add("hidden");
     resultSection.classList.add("hidden");
     errorSection.classList.add("hidden");
+    if (unifiedUrlInput) unifiedUrlInput.focus();
   });
 }
 
-// Reset button
+// Reset button ("Tải tệp khác")
 if (btnReset) {
   btnReset.addEventListener("click", () => {
     currentTaskId = null;
     resetUI();
+    clearUnifiedInputsAndPreviews(true);
     progressSection.classList.add("hidden");
     resultSection.classList.add("hidden");
     errorSection.classList.add("hidden");
-    if (currentMode === "scribd") {
-      scribdUrlInput.value = "";
-      scribdUrlInput.focus();
-    } else if (currentMode === "youtube") {
-      ytUrlInput.value = "";
-      ytPreviewCard.classList.add("hidden");
-      ytUrlInput.focus();
-    } else if (currentMode === "facebook") {
-      fbUrlInput.value = "";
-      fbPreviewCard.classList.add("hidden");
-      fbUrlInput.focus();
-    } else if (currentMode === "direct") {
-      directUrlInput.value = "";
-      directPreviewCard.classList.add("hidden");
-      directUrlInput.focus();
+    if (unifiedUrlInput) {
+      unifiedUrlInput.focus();
+      unifiedUrlInput.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   });
 }
