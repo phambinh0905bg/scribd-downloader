@@ -15,6 +15,25 @@ except ImportError:
 
 from app.config import settings
 
+def format_speed_str(speed: Optional[float]) -> str:
+    if not speed or speed <= 0:
+        return ""
+    if speed >= 1024 * 1024:
+        return f"{speed / (1024 * 1024):.2f} MB/s"
+    elif speed >= 1024:
+        return f"{speed / 1024:.1f} KB/s"
+    return f"{int(speed)} B/s"
+
+def format_eta_str(eta: Optional[float]) -> str:
+    if eta is None or eta < 0:
+        return ""
+    eta_sec = int(eta)
+    if eta_sec < 60:
+        return f"Còn {eta_sec}s"
+    elif eta_sec < 3600:
+        return f"Còn {eta_sec // 60}p {eta_sec % 60}s"
+    return f"Còn {eta_sec // 3600}h {(eta_sec % 3600) // 60}p"
+
 logger = logging.getLogger("youtube")
 
 class YouTubeTask:
@@ -91,6 +110,8 @@ class YouTubeTask:
             "percentage": self.percentage,
             "speed": self.speed,
             "eta": self.eta,
+            "downloaded_bytes": self.downloaded_bytes,
+            "total_bytes": self.total_bytes,
             "file_size_bytes": self.file_size_bytes,
             "file_size_mb": self.file_size_mb,
             "download_url": f"/api/file/{self.task_id}" if self.status == "completed" else None,
@@ -281,6 +302,10 @@ class YouTubeDownloaderService:
                     current_stream_filename[0] = fn
                     stream_index[0] += 1
                 
+                task.downloaded_bytes = downloaded
+                if total > 0:
+                    task.total_bytes = total
+                
                 pct = 15
                 if total > 0:
                     ratio = min(1.0, downloaded / total)
@@ -294,12 +319,9 @@ class YouTubeDownloaderService:
                     else:
                         # Audio-only: 15% -> 85%
                         pct = 15 + int(ratio * 70)
-                        
-                    task.total_bytes = total
-                    task.downloaded_bytes = downloaded
                 
-                speed_str = f"{round(speed / (1024*1024), 1)} MB/s" if speed else ""
-                eta_str = f"ETA: {int(eta)}s" if eta else ""
+                speed_str = format_speed_str(speed)
+                eta_str = format_eta_str(eta)
                 
                 task.speed = speed_str
                 task.eta = eta_str

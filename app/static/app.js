@@ -857,7 +857,7 @@ function startFallbackPolling(taskId) {
     } catch (err) {
       console.warn("Polling retry error", err);
     }
-  }, 1000);
+  }, 500);
 }
 
 function stopTracking() {
@@ -880,21 +880,41 @@ function handleProgressUpdate(data) {
     const srcName = data.type === "youtube" ? "YouTube" : "Facebook";
     docMetaBadge.innerText = data.format_type === "audio" ? `${srcName} MP3 (${data.quality})` : `${srcName} MP4 (${data.quality.toUpperCase()})`;
     docMetaBadge.classList.remove("hidden");
-    if (data.speed || data.eta) {
-      pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
+    
+    const parts = [];
+    if (data.total_bytes > 0) {
+      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(1);
+      const totMb = (data.total_bytes / (1024 * 1024)).toFixed(1);
+      parts.push(`${curMb} MB / ${totMb} MB`);
+    } else if (data.downloaded_bytes > 0) {
+      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(1);
+      parts.push(`${curMb} MB`);
+    }
+    if (data.speed) parts.push(data.speed);
+    if (data.eta) parts.push(data.eta);
+
+    if (parts.length > 0) {
+      pageCounter.innerText = parts.join(" • ");
+    } else if (data.status === "compiling") {
+      pageCounter.innerText = "FFmpeg đang xử lý...";
     }
   } else if (data.type === "direct") {
     docMetaBadge.innerText = data.filename || `Remote URL File`;
     docMetaBadge.classList.remove("hidden");
+    const parts = [];
     if (data.total_bytes > 0) {
-      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(2);
-      const totMb = (data.total_bytes / (1024 * 1024)).toFixed(2);
-      pageCounter.innerText = `${curMb} MB / ${totMb} MB ${data.speed ? '• ' + data.speed : ''} ${data.eta ? '• ' + data.eta : ''}`;
+      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(1);
+      const totMb = (data.total_bytes / (1024 * 1024)).toFixed(1);
+      parts.push(`${curMb} MB / ${totMb} MB`);
     } else if (data.downloaded_bytes > 0) {
-      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(2);
-      pageCounter.innerText = `${curMb} MB ${data.speed ? '• ' + data.speed : ''}`;
-    } else if (data.speed || data.eta) {
-      pageCounter.innerText = `${data.speed} ${data.eta ? '• ' + data.eta : ''}`;
+      const curMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(1);
+      parts.push(`${curMb} MB`);
+    }
+    if (data.speed) parts.push(data.speed);
+    if (data.eta) parts.push(data.eta);
+
+    if (parts.length > 0) {
+      pageCounter.innerText = parts.join(" • ");
     }
 
   } else {

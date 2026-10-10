@@ -891,27 +891,49 @@ async def stream_task_progress(task_id: str):
             target_task = yt_task or fb_task or dir_task
             last_status = None
             last_pct = -1
+            last_bytes = -1
+            last_speed = ""
+            last_eta = ""
+            last_msg = ""
             last_log_count = 0
             ping_counter = 0
             
-            for _ in range(3600):  # max 60 minutes for huge files
+            for _ in range(14400):  # max 72 minutes (14400 * 0.3s)
                 if not target_task:
                     break
                 data = target_task.to_dict()
                 curr_status = data.get("status")
                 curr_pct = data.get("percentage")
+                curr_bytes = data.get("downloaded_bytes", 0)
+                curr_speed = data.get("speed", "")
+                curr_eta = data.get("eta", "")
+                curr_msg = data.get("stage_message", "")
                 curr_log_count = len(data.get("logs", []))
                 
-                if curr_status != last_status or curr_pct != last_pct or curr_log_count != last_log_count:
+                changed = (
+                    curr_status != last_status or
+                    curr_pct != last_pct or
+                    curr_bytes != last_bytes or
+                    curr_speed != last_speed or
+                    curr_eta != last_eta or
+                    curr_msg != last_msg or
+                    curr_log_count != last_log_count
+                )
+                
+                if changed:
                     yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
                     last_status = curr_status
                     last_pct = curr_pct
+                    last_bytes = curr_bytes
+                    last_speed = curr_speed
+                    last_eta = curr_eta
+                    last_msg = curr_msg
                     last_log_count = curr_log_count
                     ping_counter = 0
                 else:
                     ping_counter += 1
-                    # Send keepalive ping every 5 seconds (5 * 1s) to keep SSE alive during heavy ffmpeg encode
-                    if ping_counter >= 5:
+                    # Send keepalive ping every ~3 seconds (10 * 0.3s) to keep SSE alive
+                    if ping_counter >= 10:
                         yield ": ping\n\n"
                         ping_counter = 0
                     
@@ -919,7 +941,7 @@ async def stream_task_progress(task_id: str):
                     await asyncio.sleep(0.5)
                     break
                     
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.3)
 
     return StreamingResponse(
         event_generator(),

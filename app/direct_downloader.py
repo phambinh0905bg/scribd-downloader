@@ -68,6 +68,26 @@ def format_bytes_str(num_bytes: int) -> str:
         return f"{round(num_bytes / (1024 * 1024 * 1024), 2)} GB"
 
 
+def format_speed_str(speed: float) -> str:
+    if not speed or speed <= 0:
+        return ""
+    if speed >= 1024 * 1024:
+        return f"{speed / (1024 * 1024):.2f} MB/s"
+    elif speed >= 1024:
+        return f"{speed / 1024:.1f} KB/s"
+    return f"{int(speed)} B/s"
+
+def format_eta_str(eta_sec: float) -> str:
+    if eta_sec is None or eta_sec <= 0:
+        return ""
+    eta_sec = int(eta_sec)
+    if eta_sec < 60:
+        return f"Còn {eta_sec}s"
+    elif eta_sec < 3600:
+        return f"Còn {eta_sec // 60}p {eta_sec % 60}s"
+    return f"Còn {eta_sec // 3600}h {(eta_sec % 3600) // 60}p"
+
+
 class DirectDownloadTask:
     def __init__(self, task_id: str, url: str, custom_filename: Optional[str] = None):
         self.task_id = task_id
@@ -396,8 +416,7 @@ class DirectDownloaderService:
                                 interval_bytes = downloaded - last_downloaded
                                 
                                 speed = interval_bytes / interval_duration if interval_duration > 0 else 0
-                                speed_mb = speed / (1024 * 1024)
-                                task.speed = f"{round(speed_mb, 1)} MB/s"
+                                task.speed = format_speed_str(speed)
                                 
                                 cur_mb = round(downloaded / (1024 * 1024), 2)
                                 
@@ -406,13 +425,19 @@ class DirectDownloaderService:
                                     pct = min(99, int((downloaded / total_bytes) * 100))
                                     remaining_bytes = max(0, total_bytes - downloaded)
                                     eta_s = int(remaining_bytes / speed) if speed > 0 else 0
-                                    task.eta = f"ETA: {eta_s}s"
+                                    task.eta = format_eta_str(eta_s)
                                     
                                     tot_mb = round(total_bytes / (1024 * 1024), 2)
-                                    msg = f"Đang tải: {cur_mb} MB / {tot_mb} MB ({task.speed}) - {task.eta}"
+                                    msg = f"Đang tải: {cur_mb} MB / {tot_mb} MB"
+                                    if task.speed:
+                                        msg += f" ({task.speed})"
+                                    if task.eta:
+                                        msg += f" - {task.eta}"
                                 else:
                                     pct = min(95, max(1, int(duration * 2)))
-                                    msg = f"Đang tải: {cur_mb} MB ({task.speed})"
+                                    msg = f"Đang tải: {cur_mb} MB"
+                                    if task.speed:
+                                        msg += f" ({task.speed})"
                                     
                                 task.update_progress("downloading", msg, pct)
                                 last_update = now
